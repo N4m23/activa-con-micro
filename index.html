@@ -1,0 +1,264 @@
+// Crear el lienzo
+const canvas = document.createElement('canvas');
+document.body.appendChild(canvas);
+canvas.style.position = 'absolute';
+canvas.style.top = '0';
+canvas.style.left = '0';
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// Configuración del contexto
+const ctx = canvas.getContext('2d');
+ctx.strokeStyle = 'white';
+ctx.lineWidth = 5;
+
+// Variables para configurar la simulación de la tela
+const cloth = {
+  spacing: 10,
+  iterations: 5,
+  width: Math.ceil(window.innerWidth / 10),
+  height: Math.ceil(window.innerHeight / 10)
+};
+
+// Configuración de puntos
+class Point {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.px = x;
+    this.py = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.pinned = false;
+  }
+
+  update(delta) {
+    if (!this.pinned) {
+      let dx = this.x - this.px;
+      let dy = this.y - this.py;
+      
+      this.px = this.x;
+      this.py = this.y;
+      
+      this.x += dx;
+      this.y += dy;
+      this.y += 0.5; // Gravedad
+    }
+  }
+
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 2, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  constrainPosition(x, y, r) {
+    let dx = this.x - x;
+    let dy = this.y - y;
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist < r) {
+      let nx = dx / dist;
+      let ny = dy / dist;
+      this.x = x + nx * r;
+      this.y = y + ny * r;
+    }
+  }
+}
+
+// Configuración de varillas
+class Stick {
+  constructor(p1, p2) {
+    this.p1 = p1;
+    this.p2 = p2;
+    this.length = cloth.spacing;
+  }
+
+  update() {
+    let dx = this.p2.x - this.p1.x;
+    let dy = this.p2.y - this.p1.y;
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    let diff = (this.length - dist) / dist;
+    
+    if (!this.p1.pinned) {
+      this.p1.x -= dx * 0.5 * diff;
+      this.p1.y -= dy * 0.5 * diff;
+    }
+    
+    if (!this.p2.pinned) {
+      this.p2.x += dx * 0.5 * diff;
+      this.p2.y += dy * 0.5 * diff;
+    }
+  }
+
+  draw() {
+    ctx.beginPath();
+    ctx.moveTo(this.p1.x, this.p1.y);
+    ctx.lineTo(this.p2.x, this.p2.y);
+    ctx.stroke();
+  }
+}
+
+// Crear puntos y varillas
+let points = [];
+let sticks = [];
+
+for (let y = 0; y <= cloth.height; y++) {
+  for (let x = 0; x <= cloth.width; x++) {
+    let p = new Point(
+      x * cloth.spacing + window.innerWidth / 2 - cloth.width * cloth.spacing / 2,
+      y * cloth.spacing
+    );
+    
+    if (y === 0) {
+      p.pinned = true;
+    }
+    
+    points.push(p);
+    
+    if (x > 0) {
+      sticks.push(new Stick(p, points[points.length - 2]));
+    }
+    
+    if (y > 0) {
+      sticks.push(new Stick(p, points[points.length - cloth.width - 1]));
+    }
+  }
+}
+
+// Variables para la entrada de audio
+let audioContext;
+let analyser;
+let dataArray;
+let isAudioInitialized = false;
+
+// Inicializar análisis de audio
+async function initAudio() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new AudioContext();
+    analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    
+    analyser.fftSize = 256;
+    const bufferLength = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLength);
+    
+    isAudioInitialized = true;
+    console.log("Audio inicializado correctamente");
+  } catch (err) {
+    console.error("Error al inicializar el audio:", err);
+  }
+}
+
+// Función para detectar la intensidad del audio
+function getAudioIntensity() {
+  if (!isAudioInitialized) return 0;
+  
+  analyser.getByteFrequencyData(dataArray);
+  
+  // Calcular promedio de intensidad de audio
+  let sum = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    sum += dataArray[i];
+  }
+  
+  return sum / dataArray.length;
+}
+
+// Mostrar instrucciones
+function showInstructions() {
+  ctx.fillStyle = 'white';
+  ctx.font = '20px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Haz clic o toca para iniciar la captura de audio', canvas.width / 2, canvas.height / 2);
+  ctx.fillText('Luego habla o sopla para mover la tela', canvas.width / 2, canvas.height / 2 + 30);
+}
+
+// Función de actualización
+let lastTime = 0;
+function update(time) {
+  if (!lastTime) lastTime = time;
+  let delta = time - lastTime;
+  lastTime = time;
+  
+  // Limpiar lienzo
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Mostrar instrucciones si el audio no está inicializado
+  if (!isAudioInitialized) {
+    showInstructions();
+  } else {
+    // Procesar entrada de audio
+    const intensity = getAudioIntensity();
+    
+    // Usar la intensidad para mover la tela
+    if (intensity > 10) { // Umbral para detectar sonido
+      // Calcular punto de impacto basado en la intensidad
+      const force = intensity / 5;
+      const impactX = canvas.width / 2;
+      const impactY = canvas.height / 2;
+      
+      // Aplicar fuerza a los puntos cercanos
+      for (let i = 0; i < points.length; i++) {
+        const dx = points[i].x - impactX;
+        const dy = points[i].y - impactY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < 200) {
+          const power = (1 - dist / 200) * force;
+          points[i].x += (dx / dist) * power;
+          points[i].y += (dy / dist) * power;
+        }
+      }
+    }
+  }
+  
+  // Actualizar puntos
+  for (let i = 0; i < points.length; i++) {
+    points[i].update(delta);
+    
+    // Restricciones de límites
+    if (points[i].y >= canvas.height) {
+      points[i].y = canvas.height;
+    }
+  }
+  
+  // Actualizar varillas
+  for (let i = 0; i < cloth.iterations; i++) {
+    for (let j = 0; j < sticks.length; j++) {
+      sticks[j].update();
+    }
+  }
+  
+  // Dibujar varillas
+  for (let i = 0; i < sticks.length; i++) {
+    sticks[i].draw();
+  }
+  
+  requestAnimationFrame(update);
+}
+
+// Manejar eventos de interacción
+canvas.addEventListener('click', async () => {
+  if (!isAudioInitialized) {
+    await initAudio();
+  }
+});
+
+canvas.addEventListener('touchstart', async (e) => {
+  e.preventDefault();
+  if (!isAudioInitialized) {
+    await initAudio();
+  }
+});
+
+// Iniciar animación
+requestAnimationFrame(update);
+
+// Ajustar tamaño del lienzo cuando cambia el tamaño de la ventana
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});

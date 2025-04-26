@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tela Reactiva al Audio</title>
+    <title>Compresión y Expansión</title>
     <style>
         body {
             margin: 0;
@@ -48,7 +48,8 @@
 
 <body>
     <canvas id="canvas"></canvas>
-    <button id="start-button">Activar Micrófono</button>
+    <button id="start-button">Iniciar Experiencia</button>
+
     <script>
         // Configuración del canvas
         const canvas = document.getElementById('canvas');
@@ -57,7 +58,46 @@
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+
+        // Desactivar el menú contextual en dispositivos táctiles
+        canvas.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
         canvas.style.touchAction = 'none';
+
+        // Configuración de archivos de audio
+        const audioFiles = [
+            'agitacion.mp3',
+            'incertidumbre.mp3',
+            'atencion.mp3',
+            'presencia.mp3',
+            'suspension.mp3',
+            'desconexion.mp3'
+        ];
+
+        let currentAudio = null;
+        let movementActive = false;
+        let lastAudioName = null;
+        let interactionActive = false;
+
+        // Variables para seguimiento de movimiento
+        let lastMovementTime = 0;
+        let isMovementConstant = false;
+        let movementHistory = [];
+        let clickTimer = null;
+        let lastClickTime = 0;
+
+        // Automatización
+        let inactivityTimeout;
+        const inactivityTime = 10000; // 10 segundos
+        let autoSequence = ['incertidumbre.mp3', 'atencion.mp3', 'presencia.mp3', 'suspension.mp3', 'desconexion.mp3'];
+        let autoSequenceIndex = 0;
+
+        //Estado del audio
+        let audios = {};
+        let isPlaying = false;
+        let lastInteractionTime = 0;
+        let audioContext = null;
 
         //Tela
         const clothWidth = 400;
@@ -65,7 +105,6 @@
         const numPointsX = 30;
         const numPointsY = 20;
         const restDistance = clothWidth / numPointsX;
-        const initialYOffset = -clothHeight / 2; // Ajustar la posición inicial
 
         class Point {
             constructor(x, y) {
@@ -77,7 +116,6 @@
                 this.vy = 0;
                 this.pinned = false;
                 this.mass = 1;
-                this.damping = 0.97; // Ajustar la amortiguación
             }
         }
 
@@ -92,7 +130,7 @@
 
                         // Posición inicial en forma de curva suave
                         const px = canvas.width / 2 - clothWidth / 2 + clothWidth * u;
-                        const py = canvas.height / 2 - clothHeight / 2 + clothHeight * v + initialYOffset;
+                        const py = canvas.height / 2 - clothHeight / 2 + clothHeight * v;
 
                         const point = new Point(px, py);
 
@@ -136,29 +174,20 @@
                 }
             }
 
-            update(dt, wind) {
+            update(dt) {
                 const GRAVITY = 0.0981 * dt;
+                const DAMPING = 0.97;
 
                 for (let i = 0; i < this.points.length; i++) {
                     const point = this.points[i];
                     if (!point.pinned) {
                         point.vy += GRAVITY;
-                        if (wind && wind.active) {
-                            point.vx += wind.x * wind.strength;
-                            point.vy += wind.y * wind.strength;
-                        }
                         const prevX = point.x;
                         const prevY = point.y;
                         point.x += point.vx;
                         point.y += point.vy;
-                        point.vx = (point.x - prevX) * point.damping;
-                        point.vy = (point.y - prevY) * point.damping;
-
-                        // Limitar la extensión hacia abajo
-                        if (point.y > point.originalY + clothHeight) {
-                            point.y = point.originalY + clothHeight;
-                            point.vy *= -0.5; // Rebotar ligeramente
-                        }
+                        point.vx = (point.x - prevX) * DAMPING;
+                        point.vy = (point.y - prevY) * DAMPING;
                     }
                 }
                 const iterations = 15;
@@ -194,6 +223,7 @@
             }
 
             draw() {
+                // Asegurarse de que el canvas esté limpio
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = "#000";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -269,73 +299,77 @@
 
         const cloth = new Cloth();
 
-        // --- Lógica de micrófono y viento ---
-        let wind = {
-            x: 0,
-            y: 0,
-            strength: 0,
-            active: false
-        };
-        let audioContext;
-        let analyser;
-        let dataArray;
-        let animationStarted = false;
-
-        async function iniciarMicrofono() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: true
-                });
-                audioContext = new(window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-                const source = audioContext.createMediaStreamSource(stream);
-                source.connect(analyser);
-                dataArray = new Uint8Array(analyser.frequencyBinCount);
-                analizarAudio();
-            } catch (err) {
-                console.error("Error al iniciar el micrófono:", err);
-            }
-        }
-
-        function analizarAudio() {
-            if (!analyser) return;
-            analyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-                sum += dataArray[i];
-            }
-            const avg = sum / dataArray.length;
-            const umbral = 40; // Ajusta este valor
-            if (avg > umbral) {
-                wind.strength = Math.min((avg - umbral) / 30, 2.5);
-                wind.x = 0.5;
-                wind.y = 0.1;
-                wind.active = true;
-                if (!animationStarted) {
-                    animationStarted = true;
-                    animate(); // Iniciar la animación solo si se detecta sonido
-                }
-            } else {
-                wind.strength = 0;
-                wind.active = false;
-            }
-            requestAnimationFrame(analizarAudio);
-        }
-
-        function animate() {
-            cloth.update(16, wind);
-            cloth.draw();
-            requestAnimationFrame(animate);
-        }
-
-        startButton.addEventListener('click', () => {
+        // Inicializar la experiencia
+        startButton.addEventListener('click', function() {
             startButton.style.display = 'none';
-            iniciarMicrofono();
-            // La animación se iniciará solo cuando se detecte sonido
+            initAudioContext();
+            initExperience();
+            animate();
         });
-    </script>
-</body>
 
-</html>
+        function initExperience() {
+            // Iniciar con el audio presencia
+            setTimeout(() => {
+                playAudio('presencia.mp3');
+            }, 500);
+            // Iniciar el temporizador de inactividad
+            startInactivityTimer();
+        }
+
+        // Inicializa el audio - MEJORADO
+        function initAudioContext() {
+            // La política de autoplay requiere una interacción del usuario
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            // Asegurar que el contexto esté en ejecución
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    console.log("AudioContext reanudado con éxito");
+                }).catch(err => {
+                    console.error("Error al reanudar AudioContext:", err);
+                });
+            }
+
+            // Crear elementos de audio para cada archivo
+            audioFiles.forEach(file => {
+                const audio = new Audio();
+                audio.volume = 0.7;
+                audio.preload = 'auto';
+                audio.src = file;
+                audios[file] = audio;
+
+                // Asegurarse de que se pueda reproducir
+                audio.load();
+            });
+
+            console.log("Audio context initialized:", audioContext.state);
+        }
+
+        //Inactividad
+        function startInactivityTimer() {
+            clearTimeout(inactivityTimeout);
+            inactivityTimeout = setTimeout(() => {
+                playAudio('desconexion.mp3');
+            }, inactivityTime);
+        }
+
+        // Resetear el tiempo
+        function resetInactivityTimer() {
+            clearTimeout(inactivityTimeout);
+            startInactivityTimer();
+        }
+
+        // Interacciones click
+        function handleCanvasClick(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            if (isInsideCloth(x, y)) {
+                const currentTime = performance.now();
+                const timeSinceLastClick = currentTime - lastClickTime;
+                lastClickTime = currentTime;
+
+                // Determinar si es un clic rápido o lento
+                if (timeSinceLastClick < 500) { // Menos de 500ms entreHere is the original image:
+and here are the different crops of this image to help you see better, use these only as hints:
 

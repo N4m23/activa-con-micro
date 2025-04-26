@@ -33,11 +33,12 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      /* Tamaño fijo para controlar límites visuales */
       width: 400px;
       height: 300px;
       max-width: 90vw;
       max-height: 70vh;
+      background-color: #000;
+      display: block;
     }
 
     .controls {
@@ -129,28 +130,24 @@
   </div>
 
   <script>
-    // Configuración del canvas y la simulación
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const micButton = document.getElementById('mic-button');
     const volumeIndicator = document.getElementById('volume-indicator');
     const volumeLevel = document.getElementById('volume-level');
 
-    // Variables para el micrófono
     let audioContext;
     let analyzer;
     let microphone;
     let micActive = false;
     let dataArray;
 
-    // Configuración de la simulación de tela
     const clothWidth = 400;
     const clothHeight = 300;
     const numPointsX = 30;
     const numPointsY = 20;
     const restDistance = clothWidth / numPointsX;
 
-    // Clase Punto para la simulación de tela
     class Point {
       constructor(x, y) {
         this.x = x;
@@ -164,39 +161,31 @@
       }
     }
 
-    // Clase tela para simulación
     class Cloth {
       constructor() {
         this.points = [];
 
-        // Crear puntos de la tela
         for (let y = 0; y <= numPointsY; y++) {
           for (let x = 0; x <= numPointsX; x++) {
             const u = x / numPointsX;
             const v = y / numPointsY;
 
-            // Posición inicial en forma de curva suave
             const px = clothWidth * u;
             const py = clothHeight * v;
 
             const point = new Point(px, py);
 
-            // Fijar solo los puntos superiores para que cuelgue
-            if (y === 0) {
-              point.pinned = true;
-            }
+            if (y === 0) point.pinned = true;
 
             this.points.push(point);
           }
         }
 
-        // Generar el índice para acceder a los puntos fácilmente
         this.getPoint = (x, y) => this.points[y * (numPointsX + 1) + x];
 
-        // Conectar puntos con restricciones elásticas
         this.constraints = [];
 
-        // Restricciones estructurales horizontales
+        // Horizontales
         for (let y = 0; y <= numPointsY; y++) {
           for (let x = 0; x < numPointsX; x++) {
             this.constraints.push({
@@ -207,7 +196,7 @@
           }
         }
 
-        // Restricciones estructurales verticales
+        // Verticales
         for (let x = 0; x <= numPointsX; x++) {
           for (let y = 0; y < numPointsY; y++) {
             this.constraints.push({
@@ -218,7 +207,7 @@
           }
         }
 
-        // Restricciones de corte diagonal 1
+        // Diagonales 1
         for (let y = 0; y < numPointsY; y++) {
           for (let x = 0; x < numPointsX; x++) {
             this.constraints.push({
@@ -229,7 +218,7 @@
           }
         }
 
-        // Restricciones de corte diagonal 2
+        // Diagonales 2
         for (let y = 0; y < numPointsY; y++) {
           for (let x = 0; x < numPointsX; x++) {
             this.constraints.push({
@@ -242,55 +231,45 @@
       }
 
       update(dt) {
-        // Constantes físicas
-        const GRAVITY = 0.0981 * dt;
-        const DAMPING = 0.97;
+        const GRAVITY = 0.05 * dt; // menos gravedad para suavidad
+        const DAMPING = 0.9;       // más amortiguación para menos rigidez
 
-        // Aplicar fuerzas
         for (let i = 0; i < this.points.length; i++) {
           const point = this.points[i];
           if (!point.pinned) {
-            // Acumular fuerzas
             point.vy += GRAVITY;
 
-            // Verlet integration
             const prevX = point.x;
             const prevY = point.y;
 
             point.x += point.vx;
             point.y += point.vy;
 
-            // Limitar extensión vertical para evitar que la tela se estire demasiado
-            const maxY = point.originalY + 50; // límite hacia abajo (50px)
+            // Limitar extensión vertical (máx 50px abajo del original)
+            const maxY = point.originalY + 50;
             if (point.y > maxY) {
               point.y = maxY;
               point.vy *= -0.3; // rebote amortiguado
             }
 
-            // Actualizar velocidades con amortiguación
             point.vx = (point.x - prevX) * DAMPING;
             point.vy = (point.y - prevY) * DAMPING;
           }
         }
 
-        // Resolver restricciones
-        const iterations = 15;
+        const iterations = 25; // más iteraciones para suavidad
         for (let i = 0; i < iterations; i++) {
           for (let j = 0; j < this.constraints.length; j++) {
-            const constraint = this.constraints[j];
-            const p1 = constraint.p1;
-            const p2 = constraint.p2;
+            const c = this.constraints[j];
+            const p1 = c.p1;
+            const p2 = c.p2;
 
-            // Cálculo de la distancia actual
             const dx = p2.x - p1.x;
             const dy = p2.y - p1.y;
-            const currentDistance = Math.sqrt(dx * dx + dy * dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (currentDistance > 0) {
-              // Calcular dirección
-              const diff = (constraint.distance - currentDistance) / currentDistance;
-
-              // Distribuir corrección
+            if (dist > 0) {
+              const diff = (c.distance - dist) / dist;
               const percent1 = p1.pinned ? 0 : 0.5;
               const percent2 = p2.pinned ? 0 : 0.5;
 
@@ -308,11 +287,9 @@
       }
 
       applyWindForce(forceX, forceY) {
-        // Aplicar fuerzas de viento a todos los puntos
         for (let i = 0; i < this.points.length; i++) {
           const point = this.points[i];
           if (!point.pinned) {
-            // Añadir un pequeño componente aleatorio para simular turbulencia
             const randomX = (Math.random() - 0.5) * 0.05;
             const randomY = (Math.random() - 0.5) * 0.05;
 
@@ -327,7 +304,6 @@
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Dibujar la tela con degradado suave
         for (let y = 0; y < numPointsY; y++) {
           for (let x = 0; x < numPointsX; x++) {
             const p1 = this.getPoint(x, y);
@@ -335,28 +311,22 @@
             const p3 = this.getPoint(x + 1, y + 1);
             const p4 = this.getPoint(x, y + 1);
 
-            // Crear gradiente para simular sombras
             const centerX = (p1.x + p2.x + p3.x + p4.x) / 4;
             const centerY = (p1.y + p2.y + p3.y + p4.y) / 4;
 
-            // Calcular normal aproximada para efectos de iluminación
             const nx = p3.y - p1.y;
             const ny = -(p3.x - p1.x);
             const norm = Math.sqrt(nx * nx + ny * ny);
 
-            // Normalizar normal
             const normalX = nx / norm;
             const normalY = ny / norm;
 
-            // Calcular valor de iluminación basado en la normal
             const lightX = 0.5;
             const lightY = -1;
             const lightIntensity = (normalX * lightX + normalY * lightY) * 0.5 + 0.5;
 
-            // Color basado en iluminación
             const brightness = Math.floor(210 + lightIntensity * 45);
 
-            // Dibujar cuadrilátero
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
@@ -364,7 +334,6 @@
             ctx.lineTo(p4.x, p4.y);
             ctx.closePath();
 
-            // Gradiente radial para simular pliegues y ondulaciones
             const gradient = ctx.createRadialGradient(
               centerX,
               centerY,
@@ -380,7 +349,6 @@
             ctx.fillStyle = gradient;
             ctx.fill();
 
-            // Líneas muy suaves para simular pliegues
             ctx.strokeStyle = `rgba(255, 255, 255, 0.06)`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
@@ -389,16 +357,13 @@
       }
     }
 
-    // Crear tela
     const cloth = new Cloth();
 
-    // Función para inicializar el micrófono
     function initMicrophone() {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices
           .getUserMedia({ audio: true, video: false })
           .then(function (stream) {
-            // Configurar el análisis de audio
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             microphone = audioContext.createMediaStreamSource(stream);
             analyzer = audioContext.createAnalyser();
@@ -420,80 +385,66 @@
       }
     }
 
-    // Listener para el botón de micrófono
     micButton.addEventListener("click", function () {
       if (!micActive) {
         initMicrophone();
       } else {
-        // Desactivar micrófono si ya está activo
         micActive = false;
-        if (microphone) {
-          microphone.disconnect();
-        }
+        if (microphone) microphone.disconnect();
         if (audioContext) {
           audioContext.close();
           audioContext = null;
         }
         micButton.textContent = "Activar Micrófono";
         volumeIndicator.classList.add("hidden");
+
+        // Reiniciar velocidades para detener movimiento residual
+        cloth.points.forEach((point) => {
+          point.vx = 0;
+          point.vy = 0;
+          point.x = point.originalX;
+          point.y = point.originalY;
+        });
       }
     });
 
-    // Variables para el bucle de animación
     let lastTime = performance.now();
 
-    // Función de animación
     function animate() {
       const currentTime = performance.now();
-      const deltaTime = (currentTime - lastTime) / 16; // Normalizado a 60 FPS
+      const deltaTime = (currentTime - lastTime) / 16;
       lastTime = currentTime;
 
-      // Procesar entrada de micrófono si está activo
       let micLevel = 0;
 
       if (micActive && analyzer) {
         analyzer.getByteFrequencyData(dataArray);
 
-        // Calcular volumen promedio
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
           sum += dataArray[i];
         }
         micLevel = sum / dataArray.length / 255;
 
-        // Actualizar indicador visual
         volumeLevel.style.width = micLevel * 100 + "%";
 
-        // Aplicar fuerza de "respiración" a la tela
         const breathForce = micLevel * 0.15;
-
-        // Crear efecto de ondulación desde diferentes direcciones
         const time = currentTime * 0.001;
         const waveX = Math.sin(time) * breathForce;
         const waveY = Math.cos(time) * breathForce * 0.5;
 
         cloth.applyWindForce(waveX, waveY);
       } else {
-        // Animación suave incluso sin micrófono
-        const time = currentTime * 0.001;
-        const gentleForceX = Math.sin(time * 0.7) * 0.01;
-        const gentleForceY = Math.cos(time * 0.5) * 0.007;
-
-        cloth.applyWindForce(gentleForceX, gentleForceY);
         volumeLevel.style.width = "0%";
+        // No aplicar fuerzas cuando micrófono apagado
       }
 
-      // Actualizar simulación
       cloth.update(deltaTime);
-
-      // Dibujar tela
       cloth.draw();
 
-      // Continuar animación
       requestAnimationFrame(animate);
     }
 
-    // Iniciar animación
     animate();
   </script>
 </body>

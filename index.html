@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
   <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
+    body { margin: 0; overflow: hidden; cursor: grab; }
   </style>
 </head>
 <body>
@@ -14,91 +13,156 @@
     let escala = 1;
     let estaRota = false;
     let fragmentos = [];
-    let sonidoCargado = false;
+    let sonidoRuptura;
+    let posX, posY;
+    let velX = 0, velY = 0;
+    let arrastrando = false;
+    let transparencia = 70;
 
     function preload() {
-      // IMPORTANTE: Reemplaza esta URL con tu imagen local o en línea válida
-      // Ejemplo de imagen pública (asegúrate de usar una propia):
-      // casaImg = loadImage('https://tu-dominio.com/casa.png');
-      
-      // Sonido de ejemplo (necesitas subir tu MP3 y usar su URL):
-      // sonidoRuptura = loadSound('https://tu-dominio.com/globo.mp3');
+      // **IMPORTANTE**: Sube tu archivo reventar.mp3 y actualiza la URL
+      sonidoRuptura = loadSound('https://assets.mixkit.co/sfx/preview/mixkit-balloon-pop-with-delay-2350.mp3');
     }
 
     function setup() {
       createCanvas(800, 600);
+      background(0);
+      posX = width/2;
+      posY = height/2;
       
-      // Configuración del micrófono (necesita HTTPS o localhost)
       mic = new p5.AudioIn();
       mic.start();
-      getUserMedia().then(() => console.log("Micrófono activo"));
       
-      // Fragmentos simulados (sin imagen)
-      for (let i = 0; i < 10; i++) {
+      // Fragmentos de látex roto
+      for (let i = 0; i < 15; i++) {
         fragmentos.push({
           x: random(width),
           y: random(height),
-          tam: random(30, 80)
+          tam: random(20, 60),
+          velX: random(-2, 2),
+          velY: random(-2, 2)
         });
       }
-      
-      // Dibujar instrucciones
-      textSize(20);
-      textAlign(CENTER);
     }
 
     function draw() {
-      background(240);
+      background(0);
       
       if (!estaRota) {
-        // Inflar con micrófono
+        // **Inflado por micrófono**
         let vol = mic.getLevel();
-        escala = map(vol, 0, 0.5, 1, 2, true);
+        escala = map(vol, 0, 0.3, 1, 2.5, true);
+        transparencia = map(escala, 1, 2.5, 70, 30);
         
-        // Dibujar casa (simulada)
+        // **Movimiento con cursor**
+        if (!arrastrando) {
+          posX += velX;
+          posY += velY;
+          
+          // Rebote en bordes
+          if (posX > width-100 || posX < 100) velX *= -0.9;
+          if (posY > height-120 || posY < 100) velY *= -0.9;
+        }
+        
+        // **Dibujar globo-casa**
         push();
-        translate(width/2, height/2);
+        translate(posX, posY);
         scale(escala);
-        fill(255);
-        stroke(0);
-        rect(-50, -50, 100, 100); // Casa simulada (reemplázala con tu imagen)
+        
+        // Cuerpo del globo (blanco con transparencia)
+        fill(255, transparencia);
+        stroke(200);
+        strokeWeight(1);
+        beginShape();
+        vertex(-50, -60); // Parte superior izquierda
+        quadraticVertex(-60, 0, -50, 60); // Curva izquierda
+        vertex(50, 60); // Parte inferior derecha
+        quadraticVertex(60, 0, 50, -60); // Curva derecha
+        endShape(CLOSE);
+        
+        // **Patrón de tela cuadriculada (gris)**
+        stroke(150, 150, 150, transparencia);
+        strokeWeight(0.5);
+        for (let x = -40; x <= 40; x += 10) {
+          line(x, -50, x, 50);
+        }
+        for (let y = -50; y <= 50; y += 10) {
+          line(-40, y, 40, y);
+        }
+        
+        // **Bordado (líneas rojas/café)**
+        stroke(160, 80, 40); // Café
+        strokeWeight(3);
+        noFill();
+        // Marco de la "puerta"
+        rect(-15, -20, 30, 40);
+        // Líneas de puntadas
+        line(-10, -20, -10, 20);
+        line(10, -20, 10, 20);
+        line(-15, 0, 15, 0);
+        
+        // **Brillo tipo látex al inflarse**
+        if (escala > 1.5) {
+          fill(255, 255, 255, 20);
+          noStroke();
+          ellipse(0, -10, 30, 15);
+        }
+        
         pop();
         
-        // Instrucciones
-        fill(0);
-        text("Habla o haz sonidos para inflar la casa", width/2, 30);
-        
-        // Verificar si revienta
-        if (escala >= 1.8) {
+        // **Verificar ruptura**
+        if (escala >= 2.3) {
           estaRota = true;
-          if (sonidoCargado) sonidoRuptura.play();
+          sonidoRuptura.play();
         }
       } else {
-        // Dibujar fragmentos
-        fill(255, 0, 0, 150);
+        // **Fragmentos de látex roto**
+        fill(255, 180);
         noStroke();
         for (let f of fragmentos) {
           ellipse(f.x, f.y, f.tam);
+          f.x += f.velX;
+          f.y += f.velY;
+          // Rebote fragmentos
+          if (f.x > width || f.x < 0) f.velX *= -1;
+          if (f.y > height || f.y < 0) f.velY *= -1;
         }
-        text("Haz clic para reiniciar", width/2, 30);
+        textSize(32);
+        fill(255);
+        text("¡REVENTÓ!", width/2 - 80, height/2);
       }
+      
+      // **Instrucciones**
+      fill(255);
+      textSize(16);
+      text("Haz ruido para inflar | Arrastra con el cursor", 20, 30);
     }
 
     function mousePressed() {
+      if (dist(mouseX, mouseY, posX, posY) < 100 * escala && !estaRota) {
+        arrastrando = true;
+      }
       if (estaRota) {
+        // Reiniciar
         estaRota = false;
         escala = 1;
+        posX = width/2;
+        posY = height/2;
       }
     }
 
-    // Función para manejar permisos del micrófono
-    async function getUserMedia() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log("Micrófono permitido");
-      } catch (err) {
-        console.error("Error al acceder al micrófono:", err);
-        text("Por favor permite el micrófono y recarga", width/2, height/2);
+    function mouseReleased() {
+      arrastrando = false;
+      // Aplicar inercia al soltar
+      velX = (mouseX - pmouseX) * 0.5;
+      velY = (mouseY - pmouseY) * 0.5;
+    }
+
+    function mouseDragged() {
+      if (arrastrando) {
+        posX = mouseX;
+        posY = mouseY;
+        velX = velY = 0;
       }
     }
   </script>

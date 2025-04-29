@@ -1,305 +1,80 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Casa Inflable Interactiva</title>
-<style>
-    html, body {
-        margin: 0; padding: 0;
-        width: 100vw; height: 100vh;
-        background: #000;
-        overflow: hidden;
-    }
-    #container {
-        width: 100vw; height: 100vh;
-        position: relative;
-        display: flex; justify-content: center; align-items: center;
-    }
-    #casa {
-        position: absolute;
-        left: 50%; top: 50%;
-        transform: translate(-50%, -50%);
-        width: 400px; height: 400px;
-        z-index: 2;
-        pointer-events: none;
-    }
-    .house-point {
-        position: absolute;
-        width: 18px; height: 18px;
-        background: rgba(255,255,255,0.5);
-        border: 2px solid #A52A2A;
-        border-radius: 50%;
-        z-index: 10;
-        cursor: pointer;
-        pointer-events: all;
-        transform: translate(-50%,-50%);
-        transition: background .2s;
-    }
-    .house-point:active {
-        background: #fbb;
-    }
-    #mic-btn {
-        position: absolute;
-        top: 30px; left: 50%; transform: translateX(-50%);
-        background: #222; color: #fff;
-        padding: 12px 24px; border: none; border-radius: 8px;
-        font-size: 1.1em; cursor: pointer; z-index: 100;
-    }
-    #audioLevel {
-        position: absolute;
-        bottom: 30px; left: 50%; transform: translateX(-50%);
-        width: 60px; height: 120px; background: #222;
-        border-radius: 12px; border: 2px solid #fff2;
-        overflow: hidden; display: none;
-        z-index: 100;
-    }
-    #audioLevelBar {
-        position: absolute; bottom: 0; left: 0; right: 0;
-        background: #f33; width: 100%;
-        height: 0;
-        transition: height 0.1s;
-    }
-    .fragment {
-        position: absolute;
-        width: 100px; height: 100px;
-        pointer-events: all;
-        cursor: grab;
-        z-index: 20;
-        display: none;
-    }
-</style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+  </style>
 </head>
 <body>
-<div id="container">
-    <button id="mic-btn">Activar micrófono</button>
-    <div id="audioLevel"><div id="audioLevelBar"></div></div>
-    <div id="casa"></div>
-    <!-- Fragmentos -->
-    <div class="fragment" id="frag1"></div>
-    <div class="fragment" id="frag2"></div>
-    <div class="fragment" id="frag3"></div>
-    <div class="fragment" id="frag4"></div>
-</div>
-<audio id="popSound" src="https://www.soundjay.com/misc/sounds/bubble-pop-1.mp3"></audio>
-<script>
-const casa = document.getElementById('casa');
-const micBtn = document.getElementById('mic-btn');
-const audioLevel = document.getElementById('audioLevel');
-const audioLevelBar = document.getElementById('audioLevelBar');
-const popSound = document.getElementById('popSound');
+  <script>
+    let mic;
+    let casaImg;
+    let escala = 1;
+    let estaRota = false;
+    let fragmentos = [];
+    let sonidoRuptura;
 
-const housePoints = [
-    {x:200,y:40}, {x:370,y:150}, {x:370,y:370}, {x:270,y:370},
-    {x:270,y:270}, {x:130,y:270}, {x:130,y:370}, {x:30,y:370}, {x:30,y:150}
-];
-const housePointsOrig = housePoints.map(p=>({...p}));
-let dragging = false, dragIdx = null, dragOffset = {x:0,y:0};
-let burst = false;
-let scale = 1;
-let micStream = null, audioCtx = null, analyser = null, dataArray = null, rafId = null;
+    function preload() {
+      // Reemplaza con tu imagen de casa (puede ser un SVG o PNG)
+      casaImg = loadImage('https://raw.githubusercontent.com/processing/p5.js/main/docs/assets/favicon.ico'); // Ejemplo, usa tu imagen
+      sonidoRuptura = loadSound('https://assets.mixkit.co/sfx/preview/mixkit-balloon-pop-with-delay-2350.mp3'); // Reemplaza con tu MP3
+    }
 
-// Dibuja la casa y los puntos
-function drawCasa() {
-    casa.innerHTML = `
-    <svg width="400" height="400" style="position:absolute;left:0;top:0;" viewBox="0 0 400 400">
-        <defs>
-            <pattern id="bordado" width="20" height="20" patternUnits="userSpaceOnUse">
-                <rect x="0" y="0" width="20" height="20" fill="#fff"/>
-                <rect x="2" y="2" width="16" height="16" fill="none" stroke="#c33" stroke-width="2"/>
-            </pattern>
-        </defs>
-        <polygon id="house-shape" fill="white" stroke="#fff" stroke-width="18"
-            points="${housePoints.map(p=>`${p.x},${p.y}`).join(' ')}"/>
-        <polygon fill="url(#bordado)" stroke="#c33" stroke-width="8"
-            points="${housePoints.map(p=>`${p.x},${p.y}`).join(' ')}"/>
-        <!-- Puerta -->
-        <rect x="150" y="270" width="100" height="100" fill="#000" stroke="#fff" stroke-width="16"/>
-        <rect x="150" y="270" width="100" height="100" fill="none" stroke="#c33" stroke-width="8"/>
-    </svg>
-    `;
-    // Puntos de control
-    housePoints.forEach((p,i)=>{
-        let pt = document.getElementById('pt'+i);
-        if (!pt) {
-            pt = document.createElement('div');
-            pt.className = 'house-point';
-            pt.id = 'pt'+i;
-            casa.appendChild(pt);
+    function setup() {
+      createCanvas(800, 600);
+      // Configuración del micrófono
+      mic = new p5.AudioIn();
+      mic.start();
+      // Fragmentos al reventar
+      for (let i = 0; i < 10; i++) {
+        fragmentos.push({
+          x: random(width),
+          y: random(height),
+          tam: random(30, 80)
+        });
+      }
+    }
+
+    function draw() {
+      background(240);
+      
+      if (!estaRota) {
+        // Inflar con micrófono
+        let vol = mic.getLevel();
+        escala = map(vol, 0, 0.5, 1, 2, true);
+        
+        // Dibujar casa
+        push();
+        translate(width/2, height/2);
+        scale(escala);
+        imageMode(CENTER);
+        image(casaImg, 0, 0, 200, 200);
+        pop();
+        
+        // Verificar si revienta
+        if (escala >= 1.8) {
+          estaRota = true;
+          if (sonidoRuptura) sonidoRuptura.play();
         }
-        pt.style.left = p.x+'px';
-        pt.style.top = p.y+'px';
-        pt.onmousedown = (e)=>{ if(!burst) startDrag(i,e); };
-        pt.ontouchstart = (e)=>{ if(!burst) startDragTouch(i,e); };
-        pt.style.display = burst ? 'none':'block';
-    });
-}
-drawCasa();
-
-// Drag & touch de puntos
-function startDrag(idx,e) {
-    dragging = true; dragIdx = idx;
-    dragOffset.x = e.offsetX-9; dragOffset.y = e.offsetY-9;
-    window.onmousemove = dragMove;
-    window.onmouseup = stopDrag;
-}
-function dragMove(e) {
-    if(!dragging||burst) return;
-    let rect = casa.getBoundingClientRect();
-    let x = e.clientX-rect.left-dragOffset.x, y = e.clientY-rect.top-dragOffset.y;
-    x = Math.max(0,Math.min(400,x)); y = Math.max(0,Math.min(400,y));
-    housePoints[dragIdx].x = x; housePoints[dragIdx].y = y;
-    drawCasa();
-    checkBurst();
-}
-function stopDrag() {
-    dragging = false; dragIdx = null;
-    window.onmousemove = null;
-    window.onmouseup = null;
-}
-function startDragTouch(idx,e) {
-    dragging = true; dragIdx = idx;
-    let touch = e.touches[0];
-    let rect = casa.getBoundingClientRect();
-    dragOffset.x = touch.clientX-rect.left-housePoints[idx].x;
-    dragOffset.y = touch.clientY-rect.top-housePoints[idx].y;
-    window.ontouchmove = dragMoveTouch;
-    window.ontouchend = stopDragTouch;
-}
-function dragMoveTouch(e) {
-    if(!dragging||burst) return;
-    let touch = e.touches[0];
-    let rect = casa.getBoundingClientRect();
-    let x = touch.clientX-rect.left-dragOffset.x, y = touch.clientY-rect.top-dragOffset.y;
-    x = Math.max(0,Math.min(400,x)); y = Math.max(0,Math.min(400,y));
-    housePoints[dragIdx].x = x; housePoints[dragIdx].y = y;
-    drawCasa();
-    checkBurst();
-}
-function stopDragTouch() {
-    dragging = false; dragIdx = null;
-    window.ontouchmove = null;
-    window.ontouchend = null;
-}
-
-// Micrófono
-micBtn.onclick = async ()=>{
-    micBtn.style.display = 'none';
-    audioLevel.style.display = 'block';
-    try {
-        micStream = await navigator.mediaDevices.getUserMedia({audio:true});
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioCtx.createAnalyser();
-        let micSrc = audioCtx.createMediaStreamSource(micStream);
-        micSrc.connect(analyser);
-        analyser.fftSize = 256;
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-        animateMic();
-    } catch {
-        alert('No se pudo acceder al micrófono');
+      } else {
+        // Dibujar fragmentos
+        fill(255, 150);
+        noStroke();
+        for (let f of fragmentos) {
+          ellipse(f.x, f.y, f.tam);
+        }
+      }
     }
-};
-function animateMic() {
-    if(burst) return;
-    analyser.getByteFrequencyData(dataArray);
-    let level = dataArray.reduce((a,b)=>a+b,0)/dataArray.length/255;
-    audioLevelBar.style.height = (level*120)+'px';
-    scale = 1+level*0.6;
-    inflateCasa(scale);
-    if(scale>1.55) triggerBurst();
-    rafId = requestAnimationFrame(animateMic);
-}
-function inflateCasa(s) {
-    let cx=200, cy=200;
-    housePoints.forEach((p,i)=>{
-        let ox=housePointsOrig[i].x, oy=housePointsOrig[i].y;
-        p.x = cx+(ox-cx)*s;
-        p.y = cy+(oy-cy)*s;
-    });
-    drawCasa();
-}
 
-// Burst (explosión)
-function checkBurst() {
-    for(let i=0;i<housePoints.length;i++) {
-        let dx=housePoints[i].x-housePointsOrig[i].x, dy=housePoints[i].y-housePointsOrig[i].y;
-        if(Math.sqrt(dx*dx+dy*dy)>120) { triggerBurst(); break; }
+    function mousePressed() {
+      // Reiniciar al hacer clic si está rota
+      if (estaRota) {
+        estaRota = false;
+        escala = 1;
+      }
     }
-}
-function triggerBurst() {
-    if(burst) return;
-    burst = true;
-    if(rafId) cancelAnimationFrame(rafId);
-    popSound.play();
-    casa.innerHTML = '';
-    showFragments();
-    audioLevel.style.display = 'none';
-}
-
-// Fragmentos
-const frags = [
-    {svg:`<svg width="100" height="100"><polygon points="10,10 90,30 70,90 20,80" fill="white" stroke="#c33" stroke-width="8"/></svg>`},
-    {svg:`<svg width="100" height="100"><polygon points="60,10 90,50 80,90 10,70" fill="white" stroke="#c33" stroke-width="8"/></svg>`},
-    {svg:`<svg width="100" height="100"><polygon points="30,30 90,20 90,90 20,80" fill="white" stroke="#c33" stroke-width="8"/></svg>`},
-    {svg:`<svg width="100" height="100"><polygon points="10,10 80,10 90,90 20,90" fill="white" stroke="#c33" stroke-width="8"/></svg>`}
-];
-function showFragments() {
-    frags.forEach((f,i)=>{
-        let el=document.getElementById('frag'+(i+1));
-        el.innerHTML = f.svg;
-        el.style.display='block';
-        // Posición aleatoria dentro del viewport
-        let x = Math.random()*(window.innerWidth-120)+10;
-        let y = Math.random()*(window.innerHeight-120)+10;
-        el.style.left = x+'px';
-        el.style.top = y+'px';
-        el.onmousedown = (e)=>startFragDrag(i,e);
-        el.ontouchstart = (e)=>startFragDragTouch(i,e);
-    });
-}
-let fragDragging = null, fragIdx = null, fragOffset = {x:0,y:0};
-function startFragDrag(idx,e) {
-    fragDragging = true; fragIdx = idx;
-    let el = document.getElementById('frag'+(idx+1));
-    fragOffset.x = e.offsetX; fragOffset.y = e.offsetY;
-    window.onmousemove = fragMove;
-    window.onmouseup = stopFragDrag;
-}
-function fragMove(e) {
-    if(!fragDragging) return;
-    let el = document.getElementById('frag'+(fragIdx+1));
-    let x = e.clientX-fragOffset.x, y = e.clientY-fragOffset.y;
-    x = Math.max(0,Math.min(window.innerWidth-100,x));
-    y = Math.max(0,Math.min(window.innerHeight-100,y));
-    el.style.left = x+'px'; el.style.top = y+'px';
-}
-function stopFragDrag() {
-    fragDragging = null; fragIdx = null;
-    window.onmousemove = null; window.onmouseup = null;
-}
-function startFragDragTouch(idx,e) {
-    fragDragging = true; fragIdx = idx;
-    let touch = e.touches[0];
-    let el = document.getElementById('frag'+(idx+1));
-    let rect = el.getBoundingClientRect();
-    fragOffset.x = touch.clientX-rect.left;
-    fragOffset.y = touch.clientY-rect.top;
-    window.ontouchmove = fragMoveTouch;
-    window.ontouchend = stopFragDragTouch;
-}
-function fragMoveTouch(e) {
-    if(!fragDragging) return;
-    let touch = e.touches[0];
-    let el = document.getElementById('frag'+(fragIdx+1));
-    let x = touch.clientX-fragOffset.x, y = touch.clientY-fragOffset.y;
-    x = Math.max(0,Math.min(window.innerWidth-100,x));
-    y = Math.max(0,Math.min(window.innerHeight-100,y));
-    el.style.left = x+'px'; el.style.top = y+'px';
-}
-function stopFragDragTouch() {
-    fragDragging = null; fragIdx = null;
-    window.ontouchmove = null; window.ontouchend = null;
-}
-</script>
+  </script>
 </body>
 </html>

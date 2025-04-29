@@ -114,14 +114,81 @@
         
         // Inicializar la forma de la casa
         function initHouse() {
-            // Contorno base de la casa (forma de casa simple)
-            casaState.puntos = [
-                {x: 300, y: 400, origX: 300, origY: 400},
-                {x: 300, y: 200, origX: 300, origY: 200},
-                {x: 400, y: 100, origX: 400, origY: 100},
-                {x: 500, y: 200, origX: 500, origY: 200},
-                {x: 500, y: 400, origX: 500, origY: 400},
-                {x: 300, y: 400, origX: 300, origY: 400}
+            // Contorno base de la casa (forma de casa detallada)
+            const centerX = 400;
+            const centerY = 250;
+            
+            // Crear una casa más detallada con más puntos para permitir deformaciones suaves
+            casaState.puntos = [];
+            
+            // Base de la casa
+            casaState.puntos.push({x: 250, y: 400, origX: 250, origY: 400});
+            casaState.puntos.push({x: 275, y: 400, origX: 275, origY: 400});
+            casaState.puntos.push({x: 300, y: 400, origX: 300, origY: 400});
+            casaState.puntos.push({x: 325, y: 400, origX: 325, origY: 400});
+            casaState.puntos.push({x: 350, y: 400, origX: 350, origY: 400});
+            casaState.puntos.push({x: 375, y: 400, origX: 375, origY: 400});
+            casaState.puntos.push({x: 400, y: 400, origX: 400, origY: 400});
+            casaState.puntos.push({x: 425, y: 400, origX: 425, origY: 400});
+            casaState.puntos.push({x: 450, y: 400, origX: 450, origY: 400});
+            casaState.puntos.push({x: 475, y: 400, origX: 475, origY: 400});
+            casaState.puntos.push({x: 500, y: 400, origX: 500, origY: 400});
+            casaState.puntos.push({x: 525, y: 400, origX: 525, origY: 400});
+            casaState.puntos.push({x: 550, y: 400, origX: 550, origY: 400});
+            
+            // Lado derecho
+            casaState.puntos.push({x: 550, y: 375, origX: 550, origY: 375});
+            casaState.puntos.push({x: 550, y: 350, origX: 550, origY: 350});
+            casaState.puntos.push({x: 550, y: 325, origX: 550, origY: 325});
+            casaState.puntos.push({x: 550, y: 300, origX: 550, origY: 300});
+            casaState.puntos.push({x: 550, y: 275, origX: 550, origY: 275});
+            casaState.puntos.push({x: 550, y: 250, origX: 550, origY: 250});
+            casaState.puntos.push({x: 550, y: 225, origX: 550, origY: 225});
+            casaState.puntos.push({x: 550, y: 200, origX: 550, origY: 200});
+            
+            // Techo lado derecho
+            casaState.puntos.push({x: 525, y: 180, origX: 525, origY: 180});
+            casaState.puntos.push({x: 500, y: 160, origX: 500, origY: 160});
+            casaState.puntos.push({x: 475, y: 140, origX: 475, origY: 140});
+            casaState.puntos.push({x: 450, y: 120, origX: 450, origY: 120});
+            casaState.puntos.push({x: 425, y: 110, origX: 425, origY: 110});
+            
+            // Pico del techo
+            casaState.puntos.push({x: 400, y: 100, origX: 400, origY: 100});
+            
+            // Techo lado izquierdo
+            casaState.puntos.push({x: 375, y: 110, origX: 375, origY: 110});
+            casaState.puntos.push({x: 350, y: 120, origX: 350, origY: 120});
+            casaState.puntos.push({x: 325, y: 140, origX: 325, origY: 140});
+            casaState.puntos.push({x: 300, y: 160, origX: 300, origY: 160});
+            casaState.puntos.push({x: 275, y: 180, origX: 275, origY: 180});
+            
+            // Lado izquierdo
+            casaState.puntos.push({x: 250, y: 200, origX: 250, origY: 200});
+            casaState.puntos.push({x: 250, y: 225, origX: 250, origY: 225});
+            casaState.puntos.push({x: 250, y: 250, origX: 250, origY: 250});
+            casaState.puntos.push({x: 250, y: 275, origX: 250, origY: 275});
+            casaState.puntos.push({x: 250, y: 300, origX: 250, origY: 300});
+            casaState.puntos.push({x: 250, y: 325, origX: 250, origY: 325});
+            casaState.puntos.push({x: 250, y: 350, origX: 250, origY: 350});
+            casaState.puntos.push({x: 250, y: 375, origX: 250, origY: 375});
+            casaState.puntos.push({x: 250, y: 400, origX: 250, origY: 400});
+            
+            // Añadir características de la casa (puerta y ventanas)
+            casaState.puerta = {
+                x: 375, y: 350, ancho: 50, alto: 50,
+                origX: 375, origY: 350, origAncho: 50, origAlto: 50
+            };
+            
+            casaState.ventanas = [
+                {
+                    x: 300, y: 300, ancho: 40, alto: 40,
+                    origX: 300, origY: 300, origAncho: 40, origAlto: 40
+                },
+                {
+                    x: 460, y: 300, ancho: 40, alto: 40,
+                    origX: 460, origY: 300, origAncho: 40, origAlto: 40
+                }
             ];
         }
         
@@ -148,7 +215,8 @@
                     ctx.closePath();
                     
                     // Rellenar con patrón cuadriculado
-                    ctx.fillStyle = `rgba(255, 255, 255, ${0.8 - fragment.transparency})`;
+                    const colorInflable = getInflableColor(fragment.transparency);
+                    ctx.fillStyle = colorInflable;
                     ctx.fill();
                     
                     // Dibujar el bordado
@@ -162,7 +230,18 @@
                     ctx.restore();
                 });
             } else {
-                // Dibujar la casa inflada
+                // Calcular sombra basada en la inflación
+                if (casaState.inflation > 0.1) {
+                    // Añadir sombra que crece con la inflación
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.ellipse(400, 425, 150 + casaState.inflation * 50, 25 + casaState.inflation * 10, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 0, 0, ${0.2 + casaState.inflation * 0.3})`;
+                    ctx.fill();
+                    ctx.restore();
+                }
+                
+                // Dibujar el cuerpo principal de la casa
                 ctx.beginPath();
                 casaState.puntos.forEach((point, i) => {
                     if (i === 0) {
@@ -173,22 +252,277 @@
                 });
                 ctx.closePath();
                 
-                // Rellenar con color base, opacidad variable según inflado
-                ctx.fillStyle = `rgba(255, 255, 255, ${1 - casaState.inflation * 0.6})`;
+                // Color base que cambia con la inflación: de blanco plano a un tono más vibrante de inflable
+                const colorInflable = getInflableColor(casaState.inflation);
+                ctx.fillStyle = colorInflable;
                 ctx.fill();
                 
-                // Dibujar el bordado (contorno)
-                ctx.strokeStyle = '#6c6c6c';
-                ctx.lineWidth = 2;
+                // Efecto de volumen en los bordes cuando se infla
+                if (casaState.inflation > 0.3) {
+                    // Añadir efecto de volumen con gradientes en los bordes
+                    ctx.save();
+                    // Efecto de brillo
+                    const brilloAlpha = Math.min(0.5, casaState.inflation * 0.5);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${brilloAlpha})`;
+                    ctx.lineWidth = 3 + casaState.inflation * 5;
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                
+                // Dibujar el bordado (contorno) - más visible cuando no está inflado
+                const lineWidth = Math.max(0.5, 2 - casaState.inflation * 1.5);
+                ctx.strokeStyle = `rgba(108, 108, 108, ${1 - casaState.inflation * 0.7})`;
+                ctx.lineWidth = lineWidth;
                 ctx.stroke();
                 
-                // Dibujar la cuadrícula de la tela
+                // Dibujar puntadas de bordado cuando está menos inflado
+                if (casaState.inflation < 0.5) {
+                    drawStitches(ctx, casaState.puntos, casaState.inflation);
+                }
+                
+                // Dibujar la cuadrícula de la tela - más visible cuando no está inflado
                 drawGrid(ctx, casaState.puntos);
+                
+                // Dibujar la puerta y ventanas
+                drawDoorAndWindows(ctx);
+                
+                // Dibujar efectos de brillo para apariencia de inflable cuando está muy inflado
+                if (casaState.inflation > 0.5) {
+                    drawInflatedEffects(ctx);
+                }
             }
+        }
+        
+        // Función para calcular el color del inflable basado en el nivel de inflación
+        function getInflableColor(inflationLevel) {
+            // Cuando no está inflado: blanco con textura de tela
+            // Cuando está inflado: color vibrante de castillo inflable
+            const r = Math.floor(255 - inflationLevel * 30);
+            const g = Math.floor(255 - inflationLevel * 10);
+            const b = Math.floor(255);
+            const a = 1 - inflationLevel * 0.3; // Más translúcido conforme se infla
+            
+            return `rgba(${r}, ${g}, ${b}, ${a})`;
+        }
+        
+        // Dibujar puntadas de bordado
+        function drawStitches(ctx, points, inflation) {
+            ctx.save();
+            ctx.strokeStyle = '#555555';
+            ctx.lineWidth = 1.5;
+            
+            // La visibilidad de las puntadas disminuye con la inflación
+            ctx.globalAlpha = 1 - inflation * 2; // Desaparecen cuando inflation > 0.5
+            
+            // Dibujar puntadas a lo largo del contorno
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i + 1];
+                
+                // Calcular la distancia entre puntos
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Calcular el número de puntadas basado en la distancia
+                const numStitches = Math.floor(dist / 10);
+                
+                // Dibujar puntadas individuales
+                for (let j = 0; j < numStitches; j++) {
+                    const t = j / numStitches;
+                    const x1 = p1.x + dx * t;
+                    const y1 = p1.y + dy * t;
+                    const x2 = p1.x + dx * (t + 0.5 / numStitches);
+                    const y2 = p1.y + dy * (t + 0.5 / numStitches);
+                    
+                    // Dibujar la puntada como una línea corta
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.restore();
+        }
+        
+        // Dibujar puerta y ventanas
+        function drawDoorAndWindows(ctx) {
+            const inflation = casaState.inflation;
+            
+            // Actualizar la puerta y ventanas basado en la inflación
+            updateDoorAndWindowsPosition();
+            
+            ctx.save();
+            
+            // Dibujar la puerta
+            const doorColor = inflation > 0.7 ? 
+                `rgba(210, 105, 30, ${1 - inflation * 0.3})` : 
+                `rgba(139, 69, 19, ${1 - inflation * 0.2})`;
+                
+            ctx.fillStyle = doorColor;
+            ctx.fillRect(
+                casaState.puerta.x, 
+                casaState.puerta.y, 
+                casaState.puerta.ancho, 
+                casaState.puerta.alto
+            );
+            
+            // Borde de la puerta
+            ctx.strokeStyle = `rgba(0, 0, 0, ${1 - inflation * 0.8})`;
+            ctx.lineWidth = 1.5 - inflation * 0.5;
+            ctx.strokeRect(
+                casaState.puerta.x, 
+                casaState.puerta.y, 
+                casaState.puerta.ancho, 
+                casaState.puerta.alto
+            );
+            
+            // Pomo de la puerta
+            ctx.fillStyle = `rgba(255, 215, 0, ${1 - inflation * 0.5})`;
+            ctx.beginPath();
+            ctx.arc(
+                casaState.puerta.x + casaState.puerta.ancho * 0.8,
+                casaState.puerta.y + casaState.puerta.alto * 0.5,
+                5,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Dibujar las ventanas
+            casaState.ventanas.forEach(ventana => {
+                // Marco de la ventana
+                ctx.fillStyle = `rgba(173, 216, 230, ${1 - inflation * 0.3})`;
+                ctx.fillRect(
+                    ventana.x, 
+                    ventana.y, 
+                    ventana.ancho, 
+                    ventana.alto
+                );
+                
+                // Borde de la ventana
+                ctx.strokeStyle = `rgba(0, 0, 0, ${1 - inflation * 0.8})`;
+                ctx.lineWidth = 1.5 - inflation * 0.5;
+                ctx.strokeRect(
+                    ventana.x, 
+                    ventana.y, 
+                    ventana.ancho, 
+                    ventana.alto
+                );
+                
+                // Cruz de la ventana
+                ctx.beginPath();
+                ctx.moveTo(ventana.x, ventana.y + ventana.alto / 2);
+                ctx.lineTo(ventana.x + ventana.ancho, ventana.y + ventana.alto / 2);
+                ctx.moveTo(ventana.x + ventana.ancho / 2, ventana.y);
+                ctx.lineTo(ventana.x + ventana.ancho / 2, ventana.y + ventana.alto);
+                ctx.stroke();
+            });
+            
+            ctx.restore();
+        }
+        
+        // Actualizar la posición de la puerta y ventanas con la inflación
+        function updateDoorAndWindowsPosition() {
+            const centerX = 400;
+            const centerY = 250;
+            
+            // Actualizar posición y tamaño de la puerta
+            casaState.puerta.x = casaState.puerta.origX + (casaState.puerta.origX - centerX) * casaState.inflation * 0.3;
+            casaState.puerta.y = casaState.puerta.origY + (casaState.puerta.origY - centerY) * casaState.inflation * 0.3;
+            casaState.puerta.ancho = casaState.puerta.origAncho * (1 + casaState.inflation * 0.3);
+            casaState.puerta.alto = casaState.puerta.origAlto * (1 + casaState.inflation * 0.3);
+            
+            // Actualizar posición y tamaño de las ventanas
+            casaState.ventanas.forEach(ventana => {
+                ventana.x = ventana.origX + (ventana.origX - centerX) * casaState.inflation * 0.3;
+                ventana.y = ventana.origY + (ventana.origY - centerY) * casaState.inflation * 0.3;
+                ventana.ancho = ventana.origAncho * (1 + casaState.inflation * 0.3);
+                ventana.alto = ventana.origAlto * (1 + casaState.inflation * 0.3);
+            });
+        }
+        
+        // Dibujar efectos de brillo y volumen para apariencia de inflable
+        function drawInflatedEffects(ctx) {
+            const inflation = casaState.inflation;
+            if (inflation < 0.5) return;
+            
+            ctx.save();
+            
+            // Brillo en la parte superior - simulando reflejo de luz
+            const brightnessLevel = (inflation - 0.5) * 2; // 0 a 1 cuando inflation va de 0.5 a 1
+            
+            // Gradiente para simular el brillo de un inflable
+            const gradient = ctx.createLinearGradient(400, 100, 400, 300);
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${brightnessLevel * 0.7})`);
+            gradient.addColorStop(0.5, `rgba(255, 255, 255, 0)`);
+            
+            // Dibujar el brillo con forma curvada
+            ctx.beginPath();
+            ctx.moveTo(300, 150);
+            ctx.quadraticCurveTo(400, 150 - 50 * brightnessLevel, 500, 150);
+            ctx.quadraticCurveTo(450, 250, 400, 250);
+            ctx.quadraticCurveTo(350, 250, 300, 150);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            // Añadir líneas curvas de costuras características de inflables
+            if (inflation > 0.7) {
+                ctx.strokeStyle = `rgba(255, 255, 255, ${(inflation - 0.7) * 2 * 0.3})`;
+                ctx.lineWidth = 2;
+                
+                // Costuras verticales
+                drawInflatableSeam(ctx, 330, 200, 330, 350);
+                drawInflatableSeam(ctx, 470, 200, 470, 350);
+                
+                // Costura horizontal
+                drawInflatableSeam(ctx, 300, 270, 500, 270);
+            }
+            
+            ctx.restore();
+        }
+        
+        // Dibujar una costura característica de inflable
+        function drawInflatableSeam(ctx, x1, y1, x2, y2) {
+            ctx.beginPath();
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const unitX = dx / dist;
+            const unitY = dy / dist;
+            
+            // Dibujar línea ondulada para simular costura de inflable
+            const segmentos = Math.floor(dist / 10);
+            let lastX = x1;
+            let lastY = y1;
+            
+            for (let i = 1; i <= segmentos; i++) {
+                const t = i / segmentos;
+                const x = x1 + dx * t;
+                const y = y1 + dy * t;
+                
+                // Añadir pequeña ondulación
+                const ondulacion = Math.sin(t * Math.PI * 6) * 2;
+                const perpX = -unitY * ondulacion;
+                const perpY = unitX * ondulacion;
+                
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(x + perpX, y + perpY);
+                
+                lastX = x + perpX;
+                lastY = y + perpY;
+            }
+            
+            ctx.stroke();
         }
         
         // Dibujar patrón cuadriculado de la tela
         function drawGrid(context, points) {
+            // Solo dibujar cuadrícula si no está muy inflado
+            if (casaState.inflation > 0.8) return;
+            
             // Determinar el rectángulo que contiene la forma
             let minX = Infinity, minY = Infinity;
             let maxX = -Infinity, maxY = -Infinity;
@@ -206,32 +540,48 @@
             maxX += 20;
             maxY += 20;
             
-            // Tamaño de la cuadrícula, variable según inflado
-            const gridSize = 20 + casaState.inflation * 10;
+            // Tamaño de la cuadrícula, cambia a medida que se infla
+            // Con inflación 0: cuadrícula pequeña y definida como tela bordada
+            // Con inflación alta: cuadrícula más grande y menos visible
+            const baseGridSize = 15;
+            const gridSize = baseGridSize + casaState.inflation * 25;
             
             context.save();
-            context.globalAlpha = 0.5 - casaState.inflation * 0.3;
-            context.strokeStyle = '#aaaaaa';
-            context.lineWidth = 0.5;
             
-            // Dibujar líneas horizontales
-            for (let y = minY - (minY % gridSize); y <= maxY; y += gridSize) {
+            // La opacidad disminuye a medida que se infla
+            // Al inicio está bien definida (como una tela)
+            const alpha = Math.max(0, 0.6 - casaState.inflation * 0.8);
+            context.globalAlpha = alpha;
+            
+            // Color de la cuadrícula más oscuro cuando no está inflado
+            const gridColor = casaState.inflation < 0.3 ? '#777777' : '#aaaaaa';
+            context.strokeStyle = gridColor;
+            
+            // Grosor de línea disminuye con inflación
+            context.lineWidth = Math.max(0.2, 0.5 - casaState.inflation * 0.3);
+            
+            // La cuadrícula se deforma con la inflación
+            const centerX = 400;
+            const centerY = 250;
+            
+            // Dibujar líneas horizontales de la cuadrícula
+            for (let baseY = minY - (minY % baseGridSize); baseY <= maxY; baseY += baseGridSize) {
                 context.beginPath();
-                context.moveTo(minX, y);
-                context.lineTo(maxX, y);
-                context.stroke();
-            }
-            
-            // Dibujar líneas verticales
-            for (let x = minX - (minX % gridSize); x <= maxX; x += gridSize) {
-                context.beginPath();
-                context.moveTo(x, minY);
-                context.lineTo(x, maxY);
-                context.stroke();
-            }
-            
-            context.restore();
-        }
+                
+                // Si está inflado, las líneas se curvan ligeramente
+                if (casaState.inflation > 0.3) {
+                    // Crear una curva suave
+                    context.moveTo(minX, baseY);
+                    
+                    for (let x = minX; x <= maxX; x += 20) {
+                        // Calcular deformación vertical basada en la distancia al centro
+                        const dx = x - centerX;
+                        const distanceFromCenter = Math.sqrt(dx * dx);
+                        const inflationEffect = casaState.inflation * 0.2;
+                        
+                        // Cuanto más lejos del centro, más se curva la línea
+                        const yOffset = Math.sin(distanceFromCenter / 100) * inflationEffect * 15;
+                
         
         // Inflar la casa basado en el volumen de audio
         function inflarCasa(volumen) {

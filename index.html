@@ -5,327 +5,370 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Casa Globo Interactiva</title>
 <style>
-  body, html {
-    margin: 0; padding: 0; overflow: hidden; background: #000;
+  body {
+    margin: 0; padding: 0; overflow: hidden;
+    background-color: #000000;
   }
   canvas {
     display: block;
     margin: auto;
-    background: #000;
+    background-color: #000000;
+    box-shadow: 0 0 15px rgba(255,255,255,0.1);
   }
 </style>
 </head>
 <body>
-<audio id="popSound" src="reventar.mp3" preload="auto"></audio>
 <canvas id="canvas" width="800" height="600"></canvas>
+<audio id="popSound" src="reventar.mp3" preload="auto"></audio>
 
 <script>
+(() => {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   const popSound = document.getElementById('popSound');
 
-  let mic, audioContext, analyser, dataArray;
-  let inflation = 0; // 0 a 1
-  let dragging = false;
-  let dragOffset = {x: 0, y: 0};
-  let pos = {x: canvas.width/2, y: canvas.height/2};
-  let velocity = {x: 0, y: 0};
-  let isPopped = false;
-  const maxInflation = 1;
-  const popThreshold = 0.9; // cuando inflation supera este valor, revienta
+  // Estado de la casa
+  const casaState = {
+    puntos: [],
+    inflation: 0,       // 0 a 1 (inflado)
+    opacidad: 0.7,      // opacidad inicial tela
+    brillo: 0,          // brillo látex
+    bordeColor: '#8B4513', // café oscuro para bordado
+    rota: false,
+    fragments: [],
+    dragging: false,
+    dragIndex: -1,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    posX: 400,
+    posY: 300,
+    velX: 0,
+    velY: 0,
+  };
 
-  // Puntos base para la casa (paredes rectas, luego redondeamos)
-  const basePoints = [
-    {x:-80, y:100},
-    {x:-80, y:-40},
-    {x:-40, y:-80},
-    {x:0, y:-100},
-    {x:40, y:-80},
-    {x:80, y:-40},
-    {x:80, y:100},
-  ];
+  // Inicializa puntos de la casa (contorno con bordes redondeados)
+  function initHouse() {
+    casaState.puntos = [
+      {x: 300, y: 400, origX: 300, origY: 400},
+      {x: 300, y: 300, origX: 300, origY: 300},
+      {x: 300, y: 200, origX: 300, origY: 200},
+      {x: 350, y: 150, origX: 350, origY: 150},
+      {x: 400, y: 100, origX: 400, origY: 100},
+      {x: 450, y: 150, origX: 450, origY: 150},
+      {x: 500, y: 200, origX: 500, origY: 200},
+      {x: 500, y: 300, origX: 500, origY: 300},
+      {x: 500, y: 400, origX: 500, origY: 400},
+    ];
+  }
 
-  // Fragmentos para después de reventar
-  let fragments = [];
+  // Dibuja cuadrícula gris con transparencia variable
+  function drawGrid() {
+    const alpha = casaState.opacidad;
+    ctx.strokeStyle = `rgba(150,150,150,${alpha})`;
+    ctx.lineWidth = 0.5;
+    const spacing = 15;
+    const minX = 300, maxX = 500;
+    const minY = 100, maxY = 400;
 
-  // Inicializar micrófono y audio
-  async function initMic() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-      audioContext = new AudioContext();
-      mic = audioContext.createMediaStreamSource(stream);
-      analyser = audioContext.createAnalyser();
-      mic.connect(analyser);
-      analyser.fftSize = 256;
-      const bufferLength = analyser.frequencyBinCount;
-      dataArray = new Uint8Array(bufferLength);
-      animate();
-    } catch(e) {
-      alert('Por favor permite el acceso al micrófono.');
+    for(let x = minX; x <= maxX; x += spacing){
+      ctx.beginPath();
+      ctx.moveTo(x, minY);
+      ctx.lineTo(x, maxY);
+      ctx.stroke();
+    }
+    for(let y = minY; y <= maxY; y += spacing){
+      ctx.beginPath();
+      ctx.moveTo(minX, y);
+      ctx.lineTo(maxX, y);
+      ctx.stroke();
     }
   }
 
-  // Función para dibujar la casa con borde redondeado y textura
-  function drawHouse(inflationLevel) {
-    ctx.save();
-    ctx.translate(pos.x, pos.y);
+  // Dibuja bordado café/rojo con puntadas discontinuas
+  function drawEmbroidery() {
+    ctx.strokeStyle = casaState.bordeColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10,10]); // puntadas
 
-    // Escala según inflado
-    const scale = 1 + inflationLevel * 1.5;
-    ctx.scale(scale, scale);
-
-    // Opacidad de la tela (de 0.7 a 0.3)
-    const opacity = 0.7 - inflationLevel * 0.4;
-
-    // Fondo blanco con transparencia variable
-    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
-
-    // Comenzamos trazo con curvas para redondear bordes
+    // Marco puerta
     ctx.beginPath();
-    for(let i=0; i<basePoints.length; i++) {
-      const p1 = basePoints[i];
-      const p2 = basePoints[(i+1) % basePoints.length];
-      const midX = (p1.x + p2.x)/2;
-      const midY = (p1.y + p2.y)/2;
+    ctx.moveTo(350,320);
+    ctx.lineTo(350,380);
+    ctx.lineTo(450,380);
+    ctx.lineTo(450,320);
+    ctx.closePath();
+    ctx.stroke();
 
-      if(i === 0) {
-        ctx.moveTo(p1.x, p1.y);
-      }
-      // Curva cuadrática para suavizar borde
-      ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+    // Líneas internas
+    ctx.beginPath();
+    ctx.moveTo(400,320);
+    ctx.lineTo(400,380);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(350,350);
+    ctx.lineTo(450,350);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+  }
+
+  // Dibuja la casa inflada con textura y brillo
+  function drawHouse() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(casaState.rota){
+      drawFragments();
+      return;
+    }
+
+    // Curvas para bordes redondeados
+    ctx.beginPath();
+    ctx.moveTo(casaState.puntos[0].x, casaState.puntos[0].y);
+    for(let i=1; i < casaState.puntos.length; i++){
+      const p0 = casaState.puntos[i-1];
+      const p1 = casaState.puntos[i];
+      const xc = (p0.x + p1.x)/2;
+      const yc = (p0.y + p1.y)/2;
+      ctx.quadraticCurveTo(p0.x, p0.y, xc, yc);
     }
     ctx.closePath();
 
-    // Rellenar con textura cuadriculada mate o brillo látex según inflado
-    if(inflationLevel < 0.5) {
-      // Cuadrícula mate (líneas grises)
-      ctx.fill();
-      ctx.strokeStyle = `rgba(150,150,150,${opacity})`;
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+    // Gradiente para tela mate a brillo látex
+    const alpha = casaState.opacidad;
+    const grad = ctx.createRadialGradient(400, 250, 50, 400, 250, 200);
+    grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+    grad.addColorStop(1, `rgba(255,255,255,0)`);
+    ctx.fillStyle = grad;
+    ctx.fill();
 
-      // Dibuja cuadrícula
-      ctx.strokeStyle = `rgba(120,120,120,${opacity})`;
-      ctx.lineWidth = 0.5;
-      const gridSize = 15;
-      for(let x = -80; x <= 80; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, -100);
-        ctx.lineTo(x, 100);
-        ctx.stroke();
+    // Cuadrícula
+    drawGrid();
+
+    // Bordado
+    drawEmbroidery();
+
+    // Brillo látex adicional
+    if(casaState.inflation > 0.5){
+      const brilloAlpha = (casaState.inflation - 0.5)*2*0.3;
+      const radialGrad = ctx.createRadialGradient(400, 200, 10, 400, 200, 150);
+      radialGrad.addColorStop(0, `rgba(255,255,255,${brilloAlpha})`);
+      radialGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = radialGrad;
+      ctx.beginPath();
+      ctx.ellipse(400, 200, 150, 100, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // Genera fragmentos al reventar
+  function createFragments() {
+    casaState.fragments = [];
+    const basePoints = casaState.puntos;
+    const nFragments = 12;
+    for(let i=0; i<nFragments; i++){
+      // Fragmento con puntos aleatorios dentro de la casa
+      const fragment = {
+        points: [],
+        x: 400 + random(-50,50),
+        y: 300 + random(-50,50),
+        rotation: random(-0.1,0.1),
+        rotationSpeed: random(-0.01,0.01),
+        transparency: 0,
+        transparencySpeed: 0.005
+      };
+      // Crear polígono simple con 4 puntos aleatorios cercanos
+      for(let j=0; j<4; j++){
+        fragment.points.push({
+          x: random(-30,30),
+          y: random(-30,30)
+        });
       }
-      for(let y = -100; y <= 100; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(-80, y);
-        ctx.lineTo(80, y);
-        ctx.stroke();
-      }
-    } else {
-      // Brillo tipo látex
-      // relleno blanco semi-transparente
-      const grad = ctx.createRadialGradient(0, -40, 20, 0, -40, 80);
-      grad.addColorStop(0, `rgba(255,255,255,${0.6 + 0.4*(inflationLevel-0.5)*2})`);
-      grad.addColorStop(1, `rgba(255,255,255,0)`);
+      casaState.fragments.push(fragment);
+    }
+  }
+
+  // Dibuja fragmentos animados
+  function drawFragments() {
+    casaState.fragments.forEach(fragment => {
+      ctx.save();
+      ctx.translate(fragment.x, fragment.y);
+      ctx.rotate(fragment.rotation);
+      ctx.beginPath();
+      fragment.points.forEach((p,i) => {
+        if(i===0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+
+      // Brillo látex fragmento
+      const grad = ctx.createRadialGradient(0,0,5,0,0,50);
+      grad.addColorStop(0, `rgba(255,255,255,${0.8 - fragment.transparency})`);
+      grad.addColorStop(1, `rgba(200,200,200,${0.5 - fragment.transparency})`);
       ctx.fillStyle = grad;
       ctx.fill();
-      ctx.strokeStyle = `rgba(200,200,200,${opacity})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
 
-    // Bordado: líneas gruesas color café o rojo
-    ctx.strokeStyle = `rgba(139,69,19,${opacity})`; // café
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    // Puerta (rectángulo)
-    ctx.moveTo(-20, 100);
-    ctx.lineTo(-20, 40);
-    ctx.lineTo(20, 40);
-    ctx.lineTo(20, 100);
-    ctx.closePath();
-    ctx.stroke();
-
-    // Puntadas verticales dentro de la puerta
-    ctx.beginPath();
-    ctx.moveTo(-10, 40);
-    ctx.lineTo(-10, 100);
-    ctx.moveTo(0, 40);
-    ctx.lineTo(0, 100);
-    ctx.moveTo(10, 40);
-    ctx.lineTo(10, 100);
-    ctx.stroke();
-
-    // Ventanas (dos rectángulos pequeños)
-    ctx.beginPath();
-    ctx.rect(-60, 0, 30, 30);
-    ctx.rect(30, 0, 30, 30);
-    ctx.stroke();
-
-    // Puntadas horizontales en ventanas
-    ctx.beginPath();
-    ctx.moveTo(-60, 15);
-    ctx.lineTo(-30, 15);
-    ctx.moveTo(30, 15);
-    ctx.lineTo(60, 15);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  // Dibujar fragmentos tras reventar
-  function drawFragments() {
-    fragments.forEach(frag => {
-      ctx.save();
-      ctx.translate(frag.x, frag.y);
-      ctx.rotate(frag.rotation);
-      ctx.fillStyle = `rgba(255,255,255,${frag.opacity})`;
-      ctx.beginPath();
-      ctx.moveTo(frag.points[0].x, frag.points[0].y);
-      for(let i=1; i<frag.points.length; i++) {
-        ctx.lineTo(frag.points[i].x, frag.points[i].y);
-      }
-      ctx.closePath();
-      ctx.fill();
-
-      // bordado fragmento
-      ctx.strokeStyle = `rgba(139,69,19,${frag.opacity})`;
+      // Bordado café
+      ctx.strokeStyle = casaState.bordeColor;
       ctx.lineWidth = 2;
       ctx.stroke();
 
+      // Cuadrícula dentro fragmento
+      drawGridFragment(fragment);
+
       ctx.restore();
 
-      // Movimiento fragmentos
-      frag.x += frag.vx;
-      frag.y += frag.vy;
-      frag.rotation += frag.vr;
-      frag.opacity -= 0.005;
-      if(frag.opacity < 0) frag.opacity = 0;
+      // Animar fragmento
+      fragment.x += random(-1,1);
+      fragment.y += random(-1,1);
+      fragment.rotation += fragment.rotationSpeed;
+      fragment.transparency += fragment.transparencySpeed;
+      if(fragment.transparency > 0.7) fragment.transparencySpeed *= -1;
+      if(fragment.transparency < 0) fragment.transparencySpeed *= -1;
     });
-    // Limpiar fragmentos invisibles
-    fragments = fragments.filter(f => f.opacity > 0);
   }
 
-  // Crear fragmentos al reventar
-  function createFragments() {
-    fragments = [];
-    const centerX = pos.x;
-    const centerY = pos.y;
-    for(let i=0; i<10; i++) {
-      fragments.push({
-        x: centerX + Math.random()*40 - 20,
-        y: centerY + Math.random()*40 - 20,
-        rotation: Math.random()*Math.PI*2,
-        vr: (Math.random()-0.5)*0.1,
-        vx: (Math.random()-0.5)*4,
-        vy: (Math.random()-0.5)*4,
-        opacity: 1,
-        points: [
-          {x: -30, y: -30},
-          {x: 30, y: -30},
-          {x: 30, y: 30},
-          {x: -30, y: 30}
-        ]
-      });
+  // Dibuja cuadrícula en fragmento (simplificada)
+  function drawGridFragment(fragment) {
+    ctx.strokeStyle = `rgba(150,150,150,${0.3})`;
+    ctx.lineWidth = 0.3;
+    const spacing = 10;
+    for(let x = -30; x <= 30; x += spacing){
+      ctx.beginPath();
+      ctx.moveTo(x, -30);
+      ctx.lineTo(x, 30);
+      ctx.stroke();
+    }
+    for(let y = -30; y <= 30; y += spacing){
+      ctx.beginPath();
+      ctx.moveTo(-30, y);
+      ctx.lineTo(30, y);
+      ctx.stroke();
     }
   }
 
+  // Variables para micrófono
+  let audioContext, analyser, microphone, javascriptNode;
+  let volume = 0;
+
   // Variables para arrastre
-  function isPointInsideHouse(x, y) {
-    // Aproximamos con rectángulo para simplificar
-    return x > pos.x - 80 && x < pos.x + 80 && y > pos.y - 100 && y < pos.y + 100;
+  let dragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  // Inicialización
+  function initMic() {
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
+      audioContext = new AudioContext();
+      microphone = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.smoothingTimeConstant = 0.8;
+      analyser.fftSize = 1024;
+
+      microphone.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      function analyze() {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for(let i=0; i<dataArray.length; i++){
+          sum += dataArray[i];
+        }
+        volume = sum / dataArray.length / 255; // Normalizado 0-1
+        requestAnimationFrame(analyze);
+      }
+      analyze();
+    }).catch(err => {
+      console.warn('Micrófono no permitido o error:', err);
+    });
   }
 
-  let draggingOffset = {x:0, y:0};
+  // Actualizar estado de la casa
+  function updateState() {
+    if(casaState.rota) return;
 
+    // Inflado por volumen
+    const targetInflation = Math.min(volume * 3, 1); // Escalar volumen para inflado máximo 1
+    casaState.inflation += (targetInflation - casaState.inflation) * 0.1;
+
+    // Opacidad inversa al inflado
+    casaState.opacidad = 0.7 - 0.4 * casaState.inflation;
+    casaState.brillo = casaState.inflation;
+
+    // Actualizar puntos para inflado (deformación simple)
+    casaState.puntos.forEach(p => {
+      const dx = p.origX - 400;
+      const dy = p.origY - 300;
+      p.x = 400 + dx * (1 + casaState.inflation * 0.3);
+      p.y = 300 + dy * (1 + casaState.inflation * 0.3);
+    });
+
+    // Detectar ruptura si inflado muy alto y estiramiento (simplificado)
+    if(casaState.inflation > 0.95){
+      casaState.rota = true;
+      createFragments();
+      popSound.play();
+    }
+  }
+
+  // Manejo de arrastre
   canvas.addEventListener('mousedown', e => {
-    if(!isPopped && isPointInsideHouse(e.offsetX, e.offsetY)) {
+    if(casaState.rota) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Ver si clic dentro de la casa (aprox rectángulo)
+    if(mouseX > 300 && mouseX < 500 && mouseY > 100 && mouseY < 400){
       dragging = true;
-      draggingOffset.x = e.offsetX - pos.x;
-      draggingOffset.y = e.offsetY - pos.y;
-      velocity.x = 0;
-      velocity.y = 0;
+      dragOffsetX = mouseX - casaState.posX;
+      dragOffsetY = mouseY - casaState.posY;
     }
   });
 
   canvas.addEventListener('mouseup', e => {
     dragging = false;
-    // Inercia simple
-    velocity.x = (e.offsetX - pos.x - draggingOffset.x) * 0.2;
-    velocity.y = (e.offsetY - pos.y - draggingOffset.y) * 0.2;
   });
 
   canvas.addEventListener('mousemove', e => {
-    if(dragging) {
-      pos.x = e.offsetX - draggingOffset.x;
-      pos.y = e.offsetY - draggingOffset.y;
+    if(dragging && !casaState.rota){
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Actualizar posición de la casa y puntos
+      const dx = mouseX - dragOffsetX - casaState.posX;
+      const dy = mouseY - dragOffsetY - casaState.posY;
+      casaState.posX += dx;
+      casaState.posY += dy;
+
+      casaState.puntos.forEach(p => {
+        p.x += dx;
+        p.y += dy;
+        p.origX += dx;
+        p.origY += dy;
+      });
     }
   });
 
-  let isPopped = false;
-
-  function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if(!isPopped) {
-      // Actualizar posición con velocidad y rebote en bordes
-      if(!dragging) {
-        pos.x += velocity.x;
-        pos.y += velocity.y;
-
-        // Rebote en bordes del canvas
-        if(pos.x < 80) { pos.x = 80; velocity.x *= -0.7; }
-        if(pos.x > canvas.width - 80) { pos.x = canvas.width - 80; velocity.x *= -0.7; }
-        if(pos.y < 100) { pos.y = 100; velocity.y *= -0.7; }
-        if(pos.y > canvas.height - 100) { pos.y = canvas.height - 100; velocity.y *= -0.7; }
-        
-        // Fricción
-        velocity.x *= 0.98;
-        velocity.y *= 0.98;
-      }
-
-      // Leer volumen micrófono
-      analyser.getByteTimeDomainData(dataArray);
-      let sum = 0;
-      for(let i=0; i<dataArray.length; i++) {
-        let val = (dataArray[i] - 128)/128;
-        sum += val*val;
-      }
-      let rms = Math.sqrt(sum / dataArray.length);
-      inflation = Math.min(rms * 10, maxInflation);
-
-      // Dibujar la casa inflada
-      drawHouse(inflation);
-
-      // Revisar si revienta
-      if(inflation > popThreshold) {
-        isPopped = true;
-        createFragments();
-        popSound.play();
-      }
-    } else {
-      drawFragments();
-    }
-
-    requestAnimationFrame(animate);
+  // Loop principal
+  function loop() {
+    updateState();
+    drawHouse();
+    requestAnimationFrame(loop);
   }
 
-  // Reinicio con click
-  canvas.addEventListener('click', () => {
-    if(isPopped) {
-      isPopped = false;
-      inflation = 0;
-      pos.x = canvas.width/2;
-      pos.y = canvas.height/2;
-      velocity.x = 0;
-      velocity.y = 0;
-      fragments = [];
-    }
-  });
+  // Inicializar
+  function init() {
+    initHouse();
+    initMic();
+    loop();
+  }
 
-  // Inicialización micrófono y animación
-  initMic();
+  init();
 
+})();
 </script>
 </body>
 </html>
-

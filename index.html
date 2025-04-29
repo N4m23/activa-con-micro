@@ -5,29 +5,35 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
   <style>
     body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
   <script>
     let mic;
-    let casaImg;
     let escala = 1;
     let estaRota = false;
     let fragmentos = [];
-    let sonidoRuptura;
+    let sonidoCargado = false;
 
     function preload() {
-      // Reemplaza con tu imagen de casa (puede ser un SVG o PNG)
-      casaImg = loadImage('https://raw.githubusercontent.com/processing/p5.js/main/docs/assets/favicon.ico'); // Ejemplo, usa tu imagen
-      sonidoRuptura = loadSound('https://assets.mixkit.co/sfx/preview/mixkit-balloon-pop-with-delay-2350.mp3'); // Reemplaza con tu MP3
+      // IMPORTANTE: Reemplaza esta URL con tu imagen local o en línea válida
+      // Ejemplo de imagen pública (asegúrate de usar una propia):
+      // casaImg = loadImage('https://tu-dominio.com/casa.png');
+      
+      // Sonido de ejemplo (necesitas subir tu MP3 y usar su URL):
+      // sonidoRuptura = loadSound('https://tu-dominio.com/globo.mp3');
     }
 
     function setup() {
       createCanvas(800, 600);
-      // Configuración del micrófono
+      
+      // Configuración del micrófono (necesita HTTPS o localhost)
       mic = new p5.AudioIn();
       mic.start();
-      // Fragmentos al reventar
+      getUserMedia().then(() => console.log("Micrófono activo"));
+      
+      // Fragmentos simulados (sin imagen)
       for (let i = 0; i < 10; i++) {
         fragmentos.push({
           x: random(width),
@@ -35,6 +41,10 @@
           tam: random(30, 80)
         });
       }
+      
+      // Dibujar instrucciones
+      textSize(20);
+      textAlign(CENTER);
     }
 
     function draw() {
@@ -45,34 +55,50 @@
         let vol = mic.getLevel();
         escala = map(vol, 0, 0.5, 1, 2, true);
         
-        // Dibujar casa
+        // Dibujar casa (simulada)
         push();
         translate(width/2, height/2);
         scale(escala);
-        imageMode(CENTER);
-        image(casaImg, 0, 0, 200, 200);
+        fill(255);
+        stroke(0);
+        rect(-50, -50, 100, 100); // Casa simulada (reemplázala con tu imagen)
         pop();
+        
+        // Instrucciones
+        fill(0);
+        text("Habla o haz sonidos para inflar la casa", width/2, 30);
         
         // Verificar si revienta
         if (escala >= 1.8) {
           estaRota = true;
-          if (sonidoRuptura) sonidoRuptura.play();
+          if (sonidoCargado) sonidoRuptura.play();
         }
       } else {
         // Dibujar fragmentos
-        fill(255, 150);
+        fill(255, 0, 0, 150);
         noStroke();
         for (let f of fragmentos) {
           ellipse(f.x, f.y, f.tam);
         }
+        text("Haz clic para reiniciar", width/2, 30);
       }
     }
 
     function mousePressed() {
-      // Reiniciar al hacer clic si está rota
       if (estaRota) {
         estaRota = false;
         escala = 1;
+      }
+    }
+
+    // Función para manejar permisos del micrófono
+    async function getUserMedia() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("Micrófono permitido");
+      } catch (err) {
+        console.error("Error al acceder al micrófono:", err);
+        text("Por favor permite el micrófono y recarga", width/2, height/2);
       }
     }
   </script>

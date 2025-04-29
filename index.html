@@ -1,376 +1,170 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Casa Globo Interactiva Mejorada</title>
-<style>
-  body {
-    margin: 0; padding: 0; overflow: hidden;
-    background-color: #000;
-    display: flex; justify-content: center; align-items: center;
-    height: 100vh;
-  }
-  #canvas-container {
-    position: relative;
-    width: 800px; height: 600px;
-  }
-  canvas {
-    border: 1px solid #333;
-    background-color: #000;
-    box-shadow: 0 0 15px rgba(255,255,255,0.1);
-    cursor: pointer;
-    display: block;
-  }
-  /* Ocultamos todos los elementos que no queremos mostrar */
-  #restart, #mic-status, #instructions {
-    display: none !important;
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Casa Globo Interactiva</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #000000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #canvas-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+        }
+        canvas {
+            border: 1px solid #333;
+            background-color: #000000;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+        }
+        /* OCULTAR TODOS LOS TEXTOS Y BOTONES */
+        #restart, #mic-status, #instructions {
+            display: none !important;
+        }
+    </style>
 </head>
 <body>
-<div id="canvas-container">
-  <canvas id="canvas" width="800" height="600"></canvas>
-  <button id="restart">Reiniciar</button>
-  <div id="mic-status">Micrófono: Desactivado</div>
-  <div id="instructions">Instrucciones aquí</div>
-</div>
+    <div id="canvas-container">
+        <canvas id="canvas" width="800" height="600"></canvas>
+        <button id="restart">Reiniciar</button>
+        <div id="mic-status">Micrófono: Desactivado</div>
+        <div id="instructions">
+            Interactúa con la casa: Mueve el cursor cerca para verla reaccionar. 
+            Haz ruido al micrófono para inflarla. Si se rompe, arrastra los fragmentos para intentar reconstruirla.
+        </div>
+    </div>
 
-<audio id="pop-sound" src="reventar.mp3" preload="auto"></audio>
+    <audio id="pop-sound" src="reventar.mp3" preload="auto"></audio>
 
-<script>
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const popSound = document.getElementById('pop-sound');
+    <script>
+        // ... (todo tu código original, solo muestro las partes modificadas abajo)
 
-  // Estado de la casa
-  const casaState = {
-    inflada: true,
-    rota: false,
-    puntos: [],
-    puntosCostra: [],
-    fragments: [],
-    dragging: false,
-    dragIndex: -1,
-    dragFragment: null,
-    lastX: 0,
-    lastY: 0,
-    inflation: 0,       // 0..1
-    opacidad: 1,
-    elasticidad: 0.05,
-    tensionMax: 80,
-    brillo: 0,
-    bordeColor: '#8B4513',
-    cursorDistancia: 0,
-    cursorInteraccion: false,
-    fragmentsSnapped: 0,
-    reconstruccionIniciada: false
-  };
+        // Estado de la casa
+        let casaState = {
+            inflada: true,
+            rota: false,
+            puntos: [],
+            fragments: [],
+            dragging: false,
+            dragIndex: -1,
+            dragFragment: null,
+            lastX: 0,
+            lastY: 0,
+            inflation: 0,
+            opacidad: 1,
+            elasticidad: 0.05,
+            tensionMax: 80,
+            brillo: 0,
+            bordeColor: '#8B4513',
+            cursorDistancia: 0,
+            cursorInteraccion: false,
+            fragmentsSnapped: 0,
+            reconstruccionIniciada: false
+        };
 
-  // Inicializar puntos de la casa
-  function initHouse() {
-    casaState.puntos = [
-      {x: 300, y: 400, origX: 300, origY: 400},
-      {x: 300, y: 300, origX: 300, origY: 300},
-      {x: 300, y: 200, origX: 300, origY: 200},
-      {x: 350, y: 150, origX: 350, origY: 150},
-      {x: 400, y: 100, origX: 400, origY: 100},
-      {x: 450, y: 150, origX: 450, origY: 150},
-      {x: 500, y: 200, origX: 500, origY: 200},
-      {x: 500, y: 300, origX: 500, origY: 300},
-      {x: 500, y: 400, origX: 500, origY: 400},
-      {x: 300, y: 400, origX: 300, origY: 400}
-    ];
+        // Referencias a elementos del DOM
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const restartButton = document.getElementById('restart');
+        const micStatus = document.getElementById('mic-status');
+        const popSound = document.getElementById('pop-sound');
+        const instructions = document.getElementById('instructions');
 
-    // Generar puntos de bordado (costra)
-    casaState.puntosCostra = [];
-    for (let i = 0; i < casaState.puntos.length - 1; i++) {
-      const p1 = casaState.puntos[i];
-      const p2 = casaState.puntos[i + 1];
-      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const numPuntos = Math.max(5, Math.floor(dist / 10));
-      for (let j = 0; j < numPuntos; j++) {
-        const t = j / numPuntos;
-        const x = p1.x + (p2.x - p1.x) * t;
-        const y = p1.y + (p2.y - p1.y) * t;
-        const variacion = 2;
-        const offsetX = (Math.random() - 0.5) * variacion;
-        const offsetY = (Math.random() - 0.5) * variacion;
-        casaState.puntosCostra.push({
-          x: x + offsetX,
-          y: y + offsetY,
-          size: 1 + Math.random() * 1.5
-        });
-      }
-    }
+        // ... (resto de funciones y lógica)
 
-    casaState.inflation = 0;
-    casaState.opacidad = 1;
-    casaState.brillo = 0;
-    casaState.rota = false;
-    casaState.fragments = [];
-    casaState.fragmentsSnapped = 0;
-    casaState.reconstruccionIniciada = false;
-  }
-
-  // Función para inflar la casa: modifica los puntos según inflation con un factor mayor para más inflado
-  function inflarCasa() {
-    const centerX = 400; // centro aproximado de la casa
-    const centerY = 300;
-
-    // Inflación máxima aumentada para efecto "muy muy muy inflada"
-    const inflationFactor = casaState.inflation * 0.5; // antes 0.1, ahora 0.5 para inflar más
-
-    for (let i = 0; i < casaState.puntos.length; i++) {
-      const p = casaState.puntos[i];
-      const dx = p.origX - centerX;
-      const dy = p.origY - centerY;
-      // Se desplazan los puntos alejándolos del centro según inflationFactor
-      p.x = p.origX + dx * inflationFactor;
-      p.y = p.origY + dy * inflationFactor;
-    }
-  }
-
-  // Dibujar cuadrícula solo dentro del contorno de la casa usando clip
-  function drawGrid(context, centerX, centerY, scale = 1) {
-    context.save();
-    context.strokeStyle = `rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2})`;
-    context.lineWidth = 0.5;
-
-    const gridSize = 10 * scale;
-    const gridRange = 150 * scale;
-
-    for (let i = -gridRange; i <= gridRange; i += gridSize) {
-      // Líneas horizontales con curva Bezier
-      context.beginPath();
-      context.moveTo(centerX - gridRange, centerY + i);
-      context.bezierCurveTo(
-        centerX - gridRange / 2, centerY + i * (1 + casaState.inflation * 0.2),
-        centerX + gridRange / 2, centerY + i * (1 + casaState.inflation * 0.2),
-        centerX + gridRange, centerY + i
-      );
-      context.stroke();
-
-      // Líneas verticales con curva Bezier
-      context.beginPath();
-      context.moveTo(centerX + i, centerY - gridRange);
-      context.bezierCurveTo(
-        centerX + i * (1 + casaState.inflation * 0.2), centerY - gridRange / 2,
-        centerX + i * (1 + casaState.inflation * 0.2), centerY + gridRange / 2,
-        centerX + i, centerY + gridRange
-      );
-      context.stroke();
-    }
-
-    context.restore();
-  }
-
-  // Dibujar puntadas bordadas
-  function drawStitches(context, points, isFragment = false) {
-    context.save();
-
-    if (isFragment) {
-      context.lineWidth = 1.5;
-      context.strokeStyle = casaState.bordeColor;
-      context.beginPath();
-      for (let i = 0; i < points.length -1; i++) {
-        const p1 = points[i];
-        const p2 = points[i+1];
-        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        const numPuntos = Math.max(3, Math.floor(dist / 5));
-        for (let j = 0; j < numPuntos; j++) {
-          const t1 = j / numPuntos;
-          const t2 = (j + 0.5) / numPuntos;
-          const x1 = p1.x + (p2.x - p1.x) * t1;
-          const y1 = p1.y + (p2.y - p1.y) * t1;
-          const x2 = p1.x + (p2.x - p1.x) * t2;
-          const y2 = p1.y + (p2.y - p1.y) * t2;
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-          const len = Math.sqrt(dx*dx + dy*dy);
-          if (len > 0) {
-            const perpX = -dy / len * 2;
-            const perpY = dx / len * 2;
-            const dir = j % 2 === 0 ? 1 : -1;
-            context.moveTo(x1, y1);
-            context.lineTo(x2 + perpX * dir, y2 + perpY * dir);
-          }
-        }
-      }
-      context.stroke();
-    } else {
-      for (let i = 0; i < casaState.puntosCostra.length; i++) {
-        const punto = casaState.puntosCostra[i];
-        const size = punto.size * (1 + casaState.inflation * 0.2);
-        context.lineWidth = 1.5;
-        context.strokeStyle = casaState.bordeColor;
-        context.beginPath();
-        context.moveTo(punto.x - size, punto.y - size);
-        context.lineTo(punto.x + size, punto.y + size);
-        context.stroke();
-        context.beginPath();
-        context.moveTo(punto.x + size, punto.y - size);
-        context.lineTo(punto.x - size, punto.y + size);
-        context.stroke();
-      }
-    }
-
-    context.restore();
-  }
-
-  // Dibujar la casa inflada o fragmentos si está rota
-  function drawHouse() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (casaState.rota) {
-      // Dibujar fragmentos rotos
-      casaState.fragments.forEach(fragment => {
-        ctx.save();
-        ctx.translate(fragment.x, fragment.y);
-        ctx.rotate(fragment.rotation);
-
-        if (fragment.isSnapped) {
-          ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
-          ctx.shadowBlur = 15;
-        } else if (fragment.isClose) {
-          ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-          ctx.shadowBlur = 10;
+        // FUNCIÓN PARA INFLAR LA CASA (AUMENTAR FACTOR DE INFLADO)
+        function inflarCasa() {
+            const centerX = 400;
+            const centerY = 300;
+            for (let i = 0; i < casaState.puntos.length; i++) {
+                let p = casaState.puntos[i];
+                // FACTOR CAMBIADO de 0.1 a 0.5 para inflar mucho más
+                p.x = p.origX + (p.origX - centerX) * casaState.inflation * 0.5;
+                p.y = p.origY + (p.origY - centerY) * casaState.inflation * 0.5;
+            }
         }
 
-        ctx.beginPath();
-        fragment.points.forEach((pt, i) => {
-          if (i === 0) ctx.moveTo(pt.x, pt.y);
-          else ctx.lineTo(pt.x, pt.y);
-        });
-        ctx.closePath();
+        // DIBUJAR CUADRÍCULA SOLO SOBRE LA CASA
+        function drawGrid(context, points, centerX, centerY, scale = 1) {
+            context.save();
+            // Recorta la cuadrícula al contorno de la casa
+            context.beginPath();
+            points.forEach((p, i) => {
+                if (i === 0) context.moveTo(p.x, p.y);
+                else context.lineTo(p.x, p.y);
+            });
+            context.closePath();
+            context.clip();
 
-        const gradientFill = ctx.createRadialGradient(0, 0, 5, 0, 0, 50);
-        gradientFill.addColorStop(0, `rgba(255, 255, 255, ${0.8 - fragment.transparency})`);
-        gradientFill.addColorStop(0.7, `rgba(220, 220, 240, ${0.6 - fragment.transparency})`);
-        gradientFill.addColorStop(1, `rgba(200, 200, 230, ${0.5 - fragment.transparency})`);
-        ctx.fillStyle = gradientFill;
-        ctx.fill();
+            context.strokeStyle = `rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2})`;
+            context.lineWidth = 0.5;
+            const gridSize = 10 * scale;
+            const gridRange = 150 * scale;
+            for (let i = -gridRange; i <= gridRange; i += gridSize) {
+                context.beginPath();
+                context.moveTo(centerX - gridRange, centerY + i);
+                context.bezierCurveTo(
+                    centerX - gridRange/2, centerY + i * (1 + casaState.inflation * 0.2),
+                    centerX + gridRange/2, centerY + i * (1 + casaState.inflation * 0.2),
+                    centerX + gridRange, centerY + i
+                );
+                context.stroke();
 
-        ctx.strokeStyle = 'rgba(200, 200, 230, 0.8)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        drawStitches(ctx, fragment.points, true);
-        drawGrid(ctx, 0, 0, 0.5);
-
-        ctx.restore();
-      });
-
-      // Opcional: dibujar guía reconstrucción si está activada
-      if (casaState.reconstruccionIniciada) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(300, 400);
-        ctx.lineTo(300, 200);
-        ctx.bezierCurveTo(320, 160, 380, 120, 400, 100);
-        ctx.bezierCurveTo(420, 120, 480, 160, 500, 200);
-        ctx.lineTo(500, 400);
-        ctx.lineTo(300, 400);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-    } else {
-      // Casa inflada
-
-      // Primero inflamos los puntos
-      inflarCasa();
-
-      // Clip para que la cuadrícula solo se dibuje dentro de la casa
-      ctx.save();
-      ctx.beginPath();
-      casaState.puntos.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
-      ctx.closePath();
-      ctx.clip();
-
-      // Dibujar cuadrícula solo dentro de la casa
-      drawGrid(ctx, 400, 300, 1);
-
-      ctx.restore();
-
-      // Dibujar la casa con bordes suavizados con Bezier
-      ctx.beginPath();
-      const pts = casaState.puntos;
-      for (let i = 0; i < pts.length - 1; i++) {
-        let p0 = pts[i];
-        let p1 = pts[i + 1];
-        if (i === 0) {
-          ctx.moveTo(p0.x, p0.y);
+                context.beginPath();
+                context.moveTo(centerX + i, centerY - gridRange);
+                context.bezierCurveTo(
+                    centerX + i * (1 + casaState.inflation * 0.2), centerY - gridRange/2,
+                    centerX + i * (1 + casaState.inflation * 0.2), centerY + gridRange/2,
+                    centerX + i, centerY + gridRange
+                );
+                context.stroke();
+            }
+            context.restore();
         }
-        // Para suavizar, calculamos punto medio para curva Bezier
-        const midX = (p0.x + p1.x) / 2;
-        const midY = (p0.y + p1.y) / 2;
-        ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
-      }
-      ctx.closePath();
 
-      // Relleno con gradiente para efecto látex
-      const gradient = ctx.createRadialGradient(400, 300, 50, 400, 300, 200);
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${0.6 + casaState.brillo * 0.4})`);
-      gradient.addColorStop(1, `rgba(180, 180, 220, 0.8)`);
-      ctx.fillStyle = gradient;
-      ctx.fill();
+        // EN EL CICLO DE DIBUJO, LLAMA A inflarCasa() ANTES DE DIBUJAR LA CASA
+        function drawHouse() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Contorno bordado
-      ctx.strokeStyle = casaState.bordeColor;
-      ctx.lineWidth = 3;
-      ctx.stroke();
+            if (!casaState.rota) {
+                // Inflar puntos antes de dibujar
+                inflarCasa();
 
-      // Dibujar puntadas bordadas
-      drawStitches(ctx, null, false);
-    }
-  }
+                // Dibuja la cuadrícula SOLO sobre la casa
+                drawGrid(ctx, casaState.puntos, 400, 300, 1);
 
-  // Simulación simple de tensión para decidir si revienta
-  function checkTension() {
-    // Solo puede reventar si está inflada más de 0.3
-    if (casaState.inflation > 0.3) {
-      // Simulamos tensión creciente con inflacion
-      const tension = casaState.inflation * 150; // escala arbitraria
-      if (tension > casaState.tensionMax) {
-        casaState.rota = true;
-        popSound.play();
-      }
-    }
-  }
+                // ... (resto de tu código para dibujar la casa, bordes, etc)
+            } else {
+                // ... (dibujo de fragmentos, etc)
+            }
+        }
 
-  // Simulación simple de actualización de inflación (podrías conectar con micrófono)
-  function updateInflation() {
-    // Aquí solo demo: inflar y desinflar lentamente
-    if (!casaState.rota) {
-      casaState.inflation += 0.005;
-      if (casaState.inflation > 1) casaState.inflation = 1;
-      casaState.brillo = casaState.inflation;
-      checkTension();
-    }
-  }
+        // SOLO REVIENTA SI ESTÁ INFLADA (agrega la condición en la función donde se evalúa la tensión)
+        function checkTension() {
+            // Solo puede reventar si está inflada más de 0.3
+            if (casaState.inflation > 0.3) {
+                const tension = casaState.inflation * 150; // ejemplo de cálculo de tensión
+                if (tension > casaState.tensionMax) {
+                    casaState.rota = true;
+                    popSound.play();
+                }
+            }
+        }
 
-  // Loop principal
-  function loop() {
-    updateInflation();
-    drawHouse();
-    requestAnimationFrame(loop);
-  }
+        // ... (resto de tu código original, no modificado)
 
-  // Inicializamos todo
-  initHouse();
-  loop();
+        // Asegúrate de que los textos y botones NO se muestran (ya están ocultos por CSS)
 
-  // Aquí podrías agregar el código para capturar el volumen del micrófono y ajustar casaState.inflation
-
-</script>
+    </script>
 </body>
 </html>
-
-

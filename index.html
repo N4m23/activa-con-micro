@@ -13,7 +13,6 @@
             touch-action: none;
             font-family: Arial, sans-serif;
         }
-        
         #container {
             position: relative;
             width: 100vw;
@@ -22,30 +21,23 @@
             justify-content: center;
             align-items: center;
         }
-        
         #casa {
             position: relative;
             width: 400px;
             height: 400px;
             background-color: transparent;
         }
-        
         #casa svg {
             width: 100%;
             height: 100%;
             pointer-events: none;
         }
-        
         .grid-overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             pointer-events: none;
             z-index: 2;
         }
-        
         .house-point {
             position: absolute;
             width: 16px;
@@ -56,7 +48,6 @@
             cursor: move;
             z-index: 10;
         }
-        
         #audioLevel {
             position: fixed;
             bottom: 20px;
@@ -69,7 +60,6 @@
             overflow: hidden;
             display: none;
         }
-        
         #audioLevelBar {
             position: absolute;
             bottom: 0;
@@ -78,7 +68,6 @@
             background-color: rgba(255, 0, 0, 0.5);
             transition: height 0.1s;
         }
-        
         #micPermission {
             position: fixed;
             top: 20px;
@@ -91,7 +80,6 @@
             cursor: pointer;
             z-index: 100;
         }
-        
         .fragments {
             position: absolute;
             width: 100px;
@@ -114,7 +102,7 @@
                         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(200, 200, 200, 0.5)" stroke-width="0.5"/>
                     </pattern>
                 </defs>
-                <path id="housePath" fill="url(#grid)" stroke="#A52A2A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M 200,50 L 300,150 L 300,300 L 250,300 L 250,250 L 150,250 L 150,300 L 100,300 L 100,150 Z"/>
+                <path id="housePath" fill="white" stroke="#A52A2A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M 200,50 L 300,150 L 300,300 L 250,300 L 250,250 L 150,250 L 150,300 L 100,300 L 100,150 Z"/>
                 <path id="houseStitches" fill="none" stroke="#A52A2A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1, 5" d="M 200,50 L 300,150 L 300,300 L 250,300 L 250,250 L 150,250 L 150,300 L 100,300 L 100,150 Z"/>
             </svg>
         </div>
@@ -122,685 +110,250 @@
             <div id="audioLevelBar"></div>
         </div>
         <button id="micPermission">Habilitar micrófono para interactuar</button>
+        <!-- Fragmentos para cuando la casa explota -->
+        <div class="fragments" id="fragment1">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <path fill="white" stroke="#A52A2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M 20,20 L 80,40 L 60,90 Z"/>
+            </svg>
+            <div class="grid-overlay"></div>
+        </div>
+        <div class="fragments" id="fragment2">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <path fill="white" stroke="#A52A2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M 40,10 L 90,30 L 70,60 L 20,80 Z"/>
+            </svg>
+            <div class="grid-overlay"></div>
+        </div>
+        <div class="fragments" id="fragment3">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <path fill="white" stroke="#A52A2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M 10,30 L 50,10 L 90,50 L 60,90 Z"/>
+            </svg>
+            <div class="grid-overlay"></div>
+        </div>
+        <audio id="popSound" preload="auto">
+            <source src="data:audio/mpeg;base64,SUQzAwAAAAAAPlRQRTEAAAAcAAAAU291bmQgSmF5IFNvdW5kIEVmZmVjdHNUQ09OAAAAFAAAAFN0b2NrIHNvdW5kIGVmZmVjdAD/+5DEAAAToKJWhexgAAZCB0XA9wBgEQhCoGAwHAYBgnB4Pg+cHwfB8HwQhCDgMBADAIAwgPnB8HwfB8EIQg4DAQBPFD4vmQGAQBAEAW4gQwf8QPnv0gDwGD5/9/8R/xAGD/6gDAL4ofP+ID/iB8/+///Ef8f5QfB8HwSjcHwfB8EIQhADgMBAGALvBB4IQQCAQCC73oIAgEAgEB7iCCEAQPAjmH2QVBEEAQBD/8/aCAIBAIBAfkRDAH2xWVSSlkUlbGJZyKKEwSA0FAUCgbAYqlQBgoEwRBEBADiwGQqAzNYZSkNiqkYVkLhDZxaXWh+UWkpNpvvbNYHOcdzYqZFXI0CZWM4QAAMFwTAoIzHZfkIkMAzeFm2Vw6AZl6QgGCcHgGAWMSjDKMZZJGWwCGXC8UoMzGPMnQ9mczHWZLmvJKjW4VBdEHUCuVLUliiRQADqMNl9TqNjmEKBQAzaoLKBUMDxYGSALDChMQhsDHsNi5ODBIMAgRAwSFwYBAiDAX8M6hWDBcNT1fAIgWA8C5MKAXdQB4FwLAsNBdK+GDAMfCsC4FwLgWBYHaIRqXKqUyBOlZQjqYqTsJCLAyxaFtLTVkLNzPYnXHO1hjg4YN+9nY8NQ+lHTxKYmDGZVyMBY+HJ6FvTuXyH2qyKJyC7zNQ3RCmk1OnmXcrkvV3X/s7rdVlVvH/nUmfp/zvnZzdV+qrqdfN//9SZ7///u5qq/OzP5+quyuzOz/OzLs6VeU2+0JFuCp2f7/TmUmXZlZdprQzXcxRUZzDGZzcZvPqr3/LmZ1oY6//q7MxwEHI+QIcVZfMqNsLmqk1GX2iXpuqCYrEVbHdwbJCM63NRRTSRM6GG66HG36+XK9n6/0/gPl3M3PFJZK4QcfYKCAOQ9TiilMu5lEGIgq5wJqyKkCp1KUkJCiZEzB86JmcXlRtf6v7uyKNljapI0W1KJkRnq+YTOj5hKIZ0XO7u9FzMzN6ERY1lHvkqiP//+xJwxWRDBQB8sZfgIgYEAPgjL8RAwFAfBGX4iJgFg+CMvxEQMAwHwRl+IiACIOhGX4iIAIg4EZfjkQBxBwIy/HJA" type="audio/mpeg">
+        </audio>
     </div>
-    
-    <!-- Fragmentos para cuando la casa explota -->
-    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <path fill="white" stroke="#A52A2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M 20,20 L 80,40 L 60,90 Z"/>
-        </svg>
-        <div class="grid-overlay"></div>
-    </div>
-    
-    <div class="fragments" id="fragment5">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <path fill="white" stroke="#A52A2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M 40,10 L 90,30 L 70,60 L 20,80 Z"/>
-        </svg>
-        <div class="grid-overlay"></div>
-    </div>
-    
-    <audio id="popSound" preload="auto">
-        <source src="data:audio/mpeg;base64,SUQzAwAAAAAAPlRQRTEAAAAcAAAAU291bmQgSmF5IFNvdW5kIEVmZmVjdHNUQ09OAAAAFAAAAFN0b2NrIHNvdW5kIGVmZmVjdAD/+5DEAAAToKJWhexgAAZCB0XA9wBgEQhCoGAwHAYBgnB4Pg+cHwfB8HwQhCDgMBADAIAwgPnB8HwfB8EIQg4DAQBPFD4vmQGAQBAEAW4gQwf8QPnv0gDwGD5/9/8R/xAGD/6gDAL4ofP+ID/iB8/+///Ef8f5QfB8HwSjcHwfB8EIQhADgMBAGALvBB4IQQCAQCC73oIAgEAgEB7iCCEAQPAjmH2QVBEEAQBD/8/aCAIBAIBAfkRDAH2xWVSSlkUlbGJZyKKEwSA0FAUCgbAYqlQBgoEwRBEBADiwGQqAzNYZSkNiqkYVkLhDZxaXWh+UWkpNpvvbNYHOcdzYqZFXI0CZWM4QAAMFwTAoIzHZfkIkMAzeFm2Vw6AZl6QgGCcHgGAWMSjDKMZZJGWwCGXC8UoMzGPMnQ9mczHWZLmvJKjW4VBdEHUCuVLUliiRQADqMNl9TqNjmEKBQAzaoLKBUMDxYGSALDChMQhsDHsNi5ODBIMAgRAwSFwYBAiDAX8M6hWDBcNT1fAIgWA8C5MKAXdQB4FwLAsNBdK+GDAMfCsC4FwLgWBYHaIRqXKqUyBOlZQjqYqTsJCLAyxaFtLTVkLNzPYnXHO1hjg4YN+9nY8NQ+lHTxKYmDGZVyMBY+HJ6FvTuXyH2qyKJyC7zNQ3RCmk1OnmXcrkvV3X/s7rdVlVvH/nUmfp/zvnZzdV+qrqdfN//9SZ7///u5qq/OzP5+quyuzOz/OzLs6VeU2+0JFuCp2f7/TmUmXZlZdprQzXcxRUZzDGZzcZvPqr3/LmZ1oY6//q7MxwEHI+QIcVZfMqNsLmqk1GX2iXpuqCYrEVbHdwbJCM63NRRTSRM6GG66HG36+XK9n6/0/gPl3M3PFJZK4QcfYKCAOQ9TiilMu5lEGIgq5wJqyKkCp1KUkJCiZEzB86JmcXlRtf6v7uyKNljapI0W1KJkRnq+YTOj5hKIZ0XO7u9FzMzN6ERY1lHvkqiP//+xJwxWRDBQB8sZfgIgYEAPgjL8RAwFAfBGX4iJgFg+CMvxEQMAwHwRl+IiACIOhGX4iIAIg4EZfjkQBxBwIy/HJA" type="audio/mpeg">
-    </audio>
-
     <script>
-        // Variables for house manipulation
+        // Variables para manipulación de la casa
         let points = [];
         const pointsOrigin = [
-            {x: 200, y: 50},  // Top point
-            {x: 300, y: 150}, // Top right
-            {x: 300, y: 300}, // Bottom right
-            {x: 250, y: 300}, // Door right top
-            {x: 250, y: 250}, // Door right bottom
-            {x: 150, y: 250}, // Door left bottom
-            {x: 150, y: 300}, // Door left top
-            {x: 100, y: 300}, // Bottom left
-            {x: 100, y: 150}  // Top left
+            {x: 200, y: 50},  // Techo
+            {x: 300, y: 150}, // Esquina derecha superior
+            {x: 300, y: 300}, // Esquina derecha inferior
+            {x: 250, y: 300}, // Puerta derecha arriba
+            {x: 250, y: 250}, // Puerta derecha abajo
+            {x: 150, y: 250}, // Puerta izquierda abajo
+            {x: 150, y: 300}, // Puerta izquierda arriba
+            {x: 100, y: 300}, // Esquina izquierda inferior
+            {x: 100, y: 150}  // Esquina izquierda superior
         ];
-        
-        let currentX = 0;
-        let currentY = 0;
-        let offsetX = 0;
-        let offsetY = 0;
-        let houseIntegrity = 100; // House integrity, decreases with stretching/inflation
+        let houseIntegrity = 100;
         let houseBurst = false;
+        let inflation = 0;
+        let isDragging = false;
+        let currentPoint = null;
+        let offset = {x: 0, y: 0};
         let audioContext = null;
         let analyser = null;
         let microphone = null;
-        let scriptProcessor = null;
-        let inflation = 0; // Current inflation level from audio
-        let isDragging = false;
-        let currentPoint = null;
-        let isDraggingFragment = false;
+        let animationFrame;
         let currentDragFragment = null;
-        let mouseX = 0;
-        let mouseY = 0;
-        let lastMouseX = 0;
-        let lastMouseY = 0;
-        let mouseVelocity = { x: 0, y: 0 };
-        let isMouseNear = false;
-        
-        // Initialize the house
+        let dragOffset = {x: 0, y: 0};
+
         document.addEventListener('DOMContentLoaded', () => {
             initializeHouse();
             initializeFragments();
-            
-            // Add mic permission button event
             document.getElementById('micPermission').addEventListener('click', setupAudioContext);
         });
-        
+
         function initializeHouse() {
-            // Create draggable points for the house
             const casa = document.getElementById('casa');
-            
             pointsOrigin.forEach((point, index) => {
                 const pointElement = document.createElement('div');
                 pointElement.className = 'house-point';
                 pointElement.style.left = point.x + 'px';
                 pointElement.style.top = point.y + 'px';
                 pointElement.dataset.index = index;
-                
-                // Mouse events
                 pointElement.addEventListener('mousedown', startDrag);
-                
-                // Touch events
                 pointElement.addEventListener('touchstart', startDragTouch, { passive: false });
-                
                 casa.appendChild(pointElement);
-                
-                // Store initial point positions
                 points.push({
                     x: point.x,
                     y: point.y,
                     element: pointElement,
                     originalX: point.x,
-                    originalY: point.y,
-                    velocity: { x: 0, y: 0 },
-                    force: { x: 0, y: 0 }
+                    originalY: point.y
                 });
             });
-            
-            // Add window events
-            window.addEventListener('mousemove', (e) => {
-                // Track mouse position for hover effects
-                lastMouseX = mouseX;
-                lastMouseY = mouseY;
-                mouseX = e.clientX;
-                mouseY = e.clientY;
-                mouseVelocity.x = mouseX - lastMouseX;
-                mouseVelocity.y = mouseY - lastMouseY;
-                
-                // Handle drag if dragging
-                if (isDragging) {
-                    drag(e);
-                } else {
-                    // Check if mouse is near the house for reactive effects
-                    const casa = document.getElementById('casa');
-                    const rect = casa.getBoundingClientRect();
-                    const centerX = rect.left + rect.width / 2;
-                    const centerY = rect.top + rect.height / 2;
-                    const distance = Math.sqrt(Math.pow(mouseX - centerX, 2) + Math.pow(mouseY - centerY, 2));
-                    
-                    isMouseNear = distance < rect.width * 0.8;
-                    
-                    // Apply subtle interactive effects when mouse is near
-                    if (isMouseNear && !houseBurst) {
-                        applyMouseEffect();
-                    }
-                }
-            });
-            
+            window.addEventListener('mousemove', drag);
             window.addEventListener('mouseup', stopDrag);
             window.addEventListener('touchmove', dragTouch, { passive: false });
             window.addEventListener('touchend', stopDragTouch);
-            
-            // Add animation loop for physics-based effects
-            requestAnimationFrame(animateHouse);
-            
-            // Initial update of the house path
             updateHousePath();
         }
-        
-        function applyMouseEffect() {
+
+        function startDrag(e) {
             if (houseBurst) return;
-            
-            const casa = document.getElementById('casa');
-            const rect = casa.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            
-            // Calculate mouse direction from center
-            const dirX = mouseX - centerX;
-            const dirY = mouseY - centerY;
-            const dist = Math.sqrt(dirX * dirX + dirY * dirY);
-            
-            // Only apply effect if mouse is moving with some velocity
-            const speed = Math.sqrt(mouseVelocity.x * mouseVelocity.x + mouseVelocity.y * mouseVelocity.y);
-            
-            if (speed > 3 && dist < rect.width) {
-                // Create a subtle pulling effect in direction of mouse movement
-                points.forEach((point, index) => {
-                    // Calculate distance from mouse to point
-                    const px = rect.left + point.x;
-                    const py = rect.top + point.y;
-                    const dx = mouseX - px;
-                    const dy = mouseY - py;
-                    const pointDist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // Apply force inversely proportional to distance
-                    if (pointDist < 100) {
-                        const intensity = (1 - pointDist / 100) * Math.min(8, speed / 2);
-                        point.force.x += mouseVelocity.x * intensity * 0.03;
-                        point.force.y += mouseVelocity.y * intensity * 0.03;
-                        
-                        // Reduce integrity slightly with aggressive mouse movements
-                        if (speed > 10) {
-                            decreaseIntegrity(speed * 0.002);
-                        }
-                    }
-                });
-            }
+            isDragging = true;
+            currentPoint = points[parseInt(e.target.dataset.index)];
+            offset.x = e.clientX - currentPoint.x;
+            offset.y = e.clientY - currentPoint.y;
         }
-        
-        function animateHouse() {
-            if (!houseBurst) {
-                // Apply physics to each point
-                points.forEach(point => {
-                    // Add velocity
-                    point.x += point.velocity.x;
-                    point.y += point.velocity.y;
-                    
-                    // Apply forces
-                    point.velocity.x += point.force.x;
-                    point.velocity.y += point.force.y;
-                    
-                    // Apply elasticity to return to original position
-                    const dx = point.x - point.originalX;
-                    const dy = point.y - point.originalY;
-                    point.velocity.x -= dx * 0.03;
-                    point.velocity.y -= dy * 0.03;
-                    
-                    // Apply damping
-                    point.velocity.x *= 0.9;
-                    point.velocity.y *= 0.9;
-                    
-                    // Reset forces
-                    point.force.x = 0;
-                    point.force.y = 0;
-                    
-                    // Update element position
-                    point.element.style.left = point.x + 'px';
-                    point.element.style.top = point.y + 'px';
-                    
-                    // Calculate stretch for integrity
-                    const stretch = Math.sqrt(dx * dx + dy * dy);
-                    if (stretch > 30) {
-                        decreaseIntegrity(stretch * 0.01);
-                    }
-                });
-                
-                // Update the path
+        function drag(e) {
+            if (isDragging && currentPoint && !houseBurst) {
+                let x = e.clientX - offset.x;
+                let y = e.clientY - offset.y;
+                // Limitar dentro del SVG
+                x = Math.max(0, Math.min(400, x));
+                y = Math.max(0, Math.min(400, y));
+                currentPoint.x = x;
+                currentPoint.y = y;
+                currentPoint.element.style.left = x + 'px';
+                currentPoint.element.style.top = y + 'px';
                 updateHousePath();
-                
-                // Update appearance based on current state
-                updateHouseAppearance();
+                checkIntegrity();
             }
-            
-            // Continue animation loop
-            requestAnimationFrame(animateHouse);
         }
-        
+        function stopDrag() {
+            isDragging = false;
+            currentPoint = null;
+        }
+        // Touch
+        function startDragTouch(e) {
+            if (houseBurst) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            isDragging = true;
+            currentPoint = points[parseInt(e.target.dataset.index)];
+            offset.x = touch.clientX - currentPoint.x;
+            offset.y = touch.clientY - currentPoint.y;
+        }
+        function dragTouch(e) {
+            if (isDragging && currentPoint && !houseBurst) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                let x = touch.clientX - offset.x;
+                let y = touch.clientY - offset.y;
+                x = Math.max(0, Math.min(400, x));
+                y = Math.max(0, Math.min(400, y));
+                currentPoint.x = x;
+                currentPoint.y = y;
+                currentPoint.element.style.left = x + 'px';
+                currentPoint.element.style.top = y + 'px';
+                updateHousePath();
+                checkIntegrity();
+            }
+        }
+        function stopDragTouch() {
+            isDragging = false;
+            currentPoint = null;
+        }
+
+        function updateHousePath() {
+            // Actualiza el SVG de la casa según los puntos
+            const d = `M ${points[0].x},${points[0].y} L ${points[1].x},${points[1].y} L ${points[2].x},${points[2].y} L ${points[3].x},${points[3].y} L ${points[4].x},${points[4].y} L ${points[5].x},${points[5].y} L ${points[6].x},${points[6].y} L ${points[7].x},${points[7].y} L ${points[8].x},${points[8].y} Z`;
+            document.getElementById('housePath').setAttribute('d', d);
+            document.getElementById('houseStitches').setAttribute('d', d);
+        }
+
+        function checkIntegrity() {
+            // Si algún punto se aleja demasiado de su origen, explota
+            for (let i = 0; i < points.length; i++) {
+                let dx = points[i].x - points[i].originalX;
+                let dy = points[i].y - points[i].originalY;
+                if (Math.sqrt(dx*dx + dy*dy) > 120) {
+                    burstHouse();
+                    break;
+                }
+            }
+        }
+
+        // AUDIO (micrófono)
+        function setupAudioContext() {
+            document.getElementById('micPermission').style.display = 'none';
+            document.getElementById('audioLevel').style.display = 'block';
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+                analyser.fftSize = 512;
+                animateInflation();
+            }).catch(() => {
+                alert("No se pudo acceder al micrófono.");
+            });
+        }
+        function animateInflation() {
+            if (houseBurst) return;
+            let dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            let volume = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            let level = Math.min(1, volume / 60);
+            document.getElementById('audioLevelBar').style.height = (level * 100) + 'px';
+            inflateHouse(level);
+            animationFrame = requestAnimationFrame(animateInflation);
+        }
+        function inflateHouse(level) {
+            // Inflar/desinflar la casa proporcionalmente al audio
+            for (let i = 0; i < points.length; i++) {
+                let ox = points[i].originalX;
+                let oy = points[i].originalY;
+                let cx = 200, cy = 200;
+                let dx = ox - cx;
+                let dy = oy - cy;
+                points[i].x = ox + dx * level * 0.5;
+                points[i].y = oy + dy * level * 0.5;
+                points[i].element.style.left = points[i].x + 'px';
+                points[i].element.style.top = points[i].y + 'px';
+            }
+            updateHousePath();
+            if (level > 0.95) burstHouse();
+        }
+
+        function burstHouse() {
+            if (houseBurst) return;
+            houseBurst = true;
+            cancelAnimationFrame(animationFrame);
+            document.getElementById('popSound').play();
+            document.getElementById('casa').style.display = 'none';
+            document.getElementById('audioLevel').style.display = 'none';
+            showFragments();
+        }
+
+        // FRAGMENTOS: Mantener dentro del viewport
         function initializeFragments() {
             const fragments = document.querySelectorAll('.fragments');
-            
-            fragments.forEach(fragment => {
-                // Position fragments randomly within the center area
-                const centerX = window.innerWidth / 2;
-                const centerY = window.innerHeight / 2;
-                
-                fragment.style.left = (centerX - 50) + 'px';
-                fragment.style.top = (centerY - 50) + 'px';
-                
-                // Add drag events for fragments
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            fragments.forEach((fragment, i) => {
+                fragment.style.left = (centerX - 60 + i*110) + 'px';
+                fragment.style.top = (centerY - 60 + i*60) + 'px';
                 fragment.addEventListener('mousedown', startDragFragment);
                 fragment.addEventListener('touchstart', startDragFragmentTouch, { passive: false });
             });
+            window.addEventListener('mousemove', dragFragment);
+            window.addEventListener('mouseup', stopDragFragment);
+            window.addEventListener('touchmove', dragFragmentTouch, { passive: false });
+            window.addEventListener('touchend', stopDragFragment);
         }
-        
-        // Dragging functions for house points
-        function startDrag(e) {
-            if (houseBurst) return;
-            
-            const pointIndex = parseInt(e.target.dataset.index);
-            currentPoint = points[pointIndex];
-            
-            offsetX = e.clientX - currentPoint.x;
-            offsetY = e.clientY - currentPoint.y;
-            
-            isDragging = true;
-            e.preventDefault();
+        function showFragments() {
+            document.querySelectorAll('.fragments').forEach(f => f.style.display = 'block');
         }
-        
-        function startDragTouch(e) {
-            if (houseBurst) return;
-            
-            const pointIndex = parseInt(e.target.dataset.index);
-            currentPoint = points[pointIndex];
-            
-            offsetX = e.touches[0].clientX - currentPoint.x;
-            offsetY = e.touches[0].clientY - currentPoint.y;
-            
-            isDragging = true;
-            e.preventDefault();
-        }
-        
-        function drag(e) {
-            if (!isDragging || houseBurst) return;
-            
-            const casa = document.getElementById('casa');
-            const rect = casa.getBoundingClientRect();
-            
-            // Calculate new position relative to the casa container
-            const newX = e.clientX - offsetX;
-            const newY = e.clientY - offsetY;
-            
-            // Update point position
-            currentPoint.x = newX;
-            currentPoint.y = newY;
-            currentPoint.element.style.left = newX + 'px';
-            currentPoint.element.style.top = newY + 'px';
-            
-            // Calculate stretch amount for integrity
-            const deltaX = newX - currentPoint.originalX;
-            const deltaY = newY - currentPoint.originalY;
-            const stretch = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            // Reduce integrity based on stretch
-            if (stretch > 20) {
-                decreaseIntegrity(stretch / 20);
-            }
-            
-            updateHousePath();
-            updateHouseAppearance();
-        }
-        
-        function dragTouch(e) {
-            if (!isDragging || houseBurst) return;
-            
-            // Calculate new position relative to the casa container
-            const newX = e.touches[0].clientX - offsetX;
-            const newY = e.touches[0].clientY - offsetY;
-            
-            // Update point position
-            currentPoint.x = newX;
-            currentPoint.y = newY;
-            currentPoint.element.style.left = newX + 'px';
-            currentPoint.element.style.top = newY + 'px';
-            
-            // Calculate stretch amount for integrity
-            const deltaX = newX - currentPoint.originalX;
-            const deltaY = newY - currentPoint.originalY;
-            const stretch = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            // Reduce integrity based on stretch
-            if (stretch > 20) {
-                decreaseIntegrity(stretch / 20);
-            }
-            
-            updateHousePath();
-            updateHouseAppearance();
-            e.preventDefault();
-        }
-        
-        function stopDrag() {
-            isDragging = false;
-        }
-        
-        function stopDragTouch() {
-            isDragging = false;
-        }
-        
-        // Dragging functions for fragments
         function startDragFragment(e) {
-            if (!houseBurst) return;
-            
-            currentDragFragment = e.currentTarget;
-            
-            const rect = currentDragFragment.getBoundingClientRect();
-            offsetX = e.clientX - rect.left;
-            offsetY = e.clientY - rect.top;
-            
-            isDraggingFragment = true;
             e.preventDefault();
+            currentDragFragment = e.target.closest('.fragments');
+            dragOffset.x = e.clientX - parseInt(currentDragFragment.style.left);
+            dragOffset.y = e.clientY - parseInt(currentDragFragment.style.top);
         }
-        
-        function startDragFragmentTouch(e) {
-            if (!houseBurst) return;
-            
-            currentDragFragment = e.currentTarget;
-            
-            const rect = currentDragFragment.getBoundingClientRect();
-            offsetX = e.touches[0].clientX - rect.left;
-            offsetY = e.touches[0].clientY - rect.top;
-            
-            isDraggingFragment = true;
-            e.preventDefault();
-        }
-        
-        window.addEventListener('mousemove', (e) => {
-            if (!isDraggingFragment || !houseBurst) return;
-            
-            currentDragFragment.style.left = (e.clientX - offsetX) + 'px';
-            currentDragFragment.style.top = (e.clientY - offsetY) + 'px';
-        });
-        
-        window.addEventListener('touchmove', (e) => {
-            if (!isDraggingFragment || !houseBurst) return;
-            
-            currentDragFragment.style.left = (e.touches[0].clientX - offsetX) + 'px';
-            currentDragFragment.style.top = (e.touches[0].clientY - offsetY) + 'px';
-            e.preventDefault();
-        });
-        
-        window.addEventListener('mouseup', () => {
-            isDraggingFragment = false;
-        });
-        
-        window.addEventListener('touchend', () => {
-            isDraggingFragment = false;
-        });
-        
-        function updateHousePath() {
-            if (houseBurst) return;
-            
-            const housePath = document.getElementById('housePath');
-            let d = `M ${points[0].x},${points[0].y}`;
-            
-            for (let i = 1; i < points.length; i++) {
-                d += ` L ${points[i].x},${points[i].y}`;
-            }
-            
-            d += ' Z'; // Close the path
-            housePath.setAttribute('d', d);
-        }
-        
-        function updateHouseAppearance() {
-            if (houseBurst) return;
-            
-            const housePath = document.getElementById('housePath');
-            const houseStitches = document.getElementById('houseStitches');
-            const casa = document.getElementById('casa');
-            
-            // Calculate total stretch/compression of the house
-            let totalStretch = 0;
-            let maxDistortion = 0;
-            
-            points.forEach((point, i) => {
-                const dx = point.x - point.originalX;
-                const dy = point.y - point.originalY;
-                const stretch = Math.sqrt(dx * dx + dy * dy);
-                totalStretch += stretch;
-                maxDistortion = Math.max(maxDistortion, stretch);
-            });
-            
-            // Update thread appearance based on stretch/tension
-            const avgStretch = totalStretch / points.length;
-            
-            // Thread appearance - tense when stretched, loose when compressed
-            if (avgStretch > 20 || inflation > 50) {
-                // Tense threads - solid line, thinner
-                const strokeWidth = Math.max(1, 3 - (avgStretch / 30) - (inflation / 60));
-                housePath.setAttribute('stroke-width', strokeWidth);
-                houseStitches.setAttribute('stroke-width', strokeWidth);
-                houseStitches.setAttribute('stroke-dasharray', '1, ' + Math.max(3, 8 - avgStretch/10));
-            } else if (avgStretch < 5 && inflation < 20) {
-                // Loose threads - more dashed, thicker
-                housePath.setAttribute('stroke-width', 3.5);
-                houseStitches.setAttribute('stroke-width', 3.5);
-                houseStitches.setAttribute('stroke-dasharray', '2, 8');
-            } else {
-                // Normal threads
-                housePath.setAttribute('stroke-width', 3);
-                houseStitches.setAttribute('stroke-width', 3);
-                houseStitches.setAttribute('stroke-dasharray', '1, 5');
-            }
-            
-            // Make the shape more balloon-like with inflation
-            if (inflation > 10 || maxDistortion > 15) {
-                points.forEach((point, i) => {
-                    // Calculate distance from center
-                    const centerX = 200;
-                    const centerY = 175;
-                    const dx = point.originalX - centerX;
-                    const dy = point.originalY - centerY;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // Normalize direction vector
-                    const nx = dx / dist;
-                    const ny = dy / dist;
-                    
-                    // Apply inflation force
-                    const inflationForce = (inflation / 100) * 60;
-                    
-                    // Update only if not currently being dragged
-                    if (!isDragging || currentPoint !== point) {
-                        const newX = point.originalX + nx * inflationForce;
-                        const newY = point.originalY + ny * inflationForce;
-                        
-                        // Apply smoothing for more natural movement
-                        point.x = point.x * 0.8 + newX * 0.2;
-                        point.y = point.y * 0.8 + newY * 0.2;
-                        point.element.style.left = point.x + 'px';
-                        point.element.style.top = point.y + 'px';
-                    }
-                });
-                updateHousePath();
-            }
-            
-            // Check if house integrity is too low
-            if (houseIntegrity <= 0 && !houseBurst) {
-                burstHouse();
+        function dragFragment(e) {
+            if (currentDragFragment) {
+                let x = e.clientX - dragOffset.x;
+                let y = e.clientY - dragOffset.y;
+                // Limitar dentro del viewport
+                x = Math.max(0, Math.min(window.innerWidth - 100, x));
+                y = Math.max(0, Math.min(window.innerHeight - 100, y));
+                currentDragFragment.style.left = x + 'px';
+                currentDragFragment.style.top = y + 'px';
             }
         }
-        
-        function decreaseIntegrity(amount) {
-            houseIntegrity -= amount;
-            if (houseIntegrity <= 0 && !houseBurst) {
-                burstHouse();
-            }
-        }
-        
-        function burstHouse() {
-            houseBurst = true;
-            const casa = document.getElementById('casa');
-            
-            // Create burst animation
-            const burstAnimation = document.createElement('div');
-            burstAnimation.style.position = 'absolute';
-            burstAnimation.style.left = '0';
-            burstAnimation.style.top = '0';
-            burstAnimation.style.width = '100%';
-            burstAnimation.style.height = '100%';
-            burstAnimation.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-            burstAnimation.style.borderRadius = '50%';
-            burstAnimation.style.transform = 'scale(0)';
-            burstAnimation.style.transition = 'transform 0.2s ease-out, opacity 0.3s ease-out';
-            burstAnimation.style.pointerEvents = 'none';
-            burstAnimation.style.zIndex = 20;
-            casa.appendChild(burstAnimation);
-            
-            // Trigger animation
-            setTimeout(() => {
-                burstAnimation.style.transform = 'scale(1.5)';
-                burstAnimation.style.opacity = '0';
-            }, 10);
-            
-            // Play burst sound
-            const popSound = document.getElementById('popSound');
-            popSound.play();
-            
-            // Hide the original house after a short delay
-            setTimeout(() => {
-                casa.style.display = 'none';
-                
-                // Show fragments with physics-based explosion
-                const fragments = document.querySelectorAll('.fragments');
-                const centerX = window.innerWidth / 2;
-                const centerY = window.innerHeight / 2;
-                
-                fragments.forEach((fragment, index) => {
-                    fragment.style.display = 'block';
-                    
-                    // Calculate explosion direction
-                    const angle = (index / fragments.length) * Math.PI * 2;
-                    const distance = 150 + Math.random() * 100;
-                    const explosionSpeed = 15 + Math.random() * 10;
-                    
-                    const x = centerX + Math.cos(angle) * distance - 50;
-                    const y = centerY + Math.sin(angle) * distance - 50;
-                    
-                    // Apply initial position
-                    fragment.style.left = (centerX - 50) + 'px';
-                    fragment.style.top = (centerY - 50) + 'px';
-                    
-                    // Animate with physics rather than CSS transition
-                    const fragmentData = {
-                        element: fragment,
-                        x: centerX - 50,
-                        y: centerY - 50,
-                        vx: Math.cos(angle) * explosionSpeed,
-                        vy: Math.sin(angle) * explosionSpeed,
-                        spin: (Math.random() - 0.5) * 20,
-                        angle: Math.random() * 360
-                    };
-                    
-                    // Start animation
-                    animateFragment(fragmentData);
-                });
-            }, 200);
-            
-            // Stop microphone processing
-            if (scriptProcessor) {
-                scriptProcessor.disconnect();
-                analyser.disconnect();
-                microphone.disconnect();
-            }
-            
-            // Hide audio level indicator
-            document.getElementById('audioLevel').style.display = 'none';
-            document.getElementById('micPermission').style.display = 'none';
-        }
-        
-        function animateFragment(fragment) {
-            // Update position
-            fragment.x += fragment.vx;
-            fragment.y += fragment.vy;
-            
-            // Apply gravity
-            fragment.vy += 0.2;
-            
-            // Apply air resistance
-            fragment.vx *= 0.98;
-            fragment.vy *= 0.98;
-            
-            // Update spin
-            fragment.angle += fragment.spin;
-            fragment.spin *= 0.98;
-            
-            // Update element
-            fragment.element.style.left = fragment.x + 'px';
-            fragment.element.style.top = fragment.y + 'px';
-            fragment.element.style.transform = `rotate(${fragment.angle}deg)`;
-            
-            // Continue animation if visible on screen
-            if (fragment.y < window.innerHeight + 100) {
-                requestAnimationFrame(() => animateFragment(fragment));
-            }
-        }
-        
-        // Audio processing for inflation
-        function setupAudioContext() {
-            // Hide the mic permission button
-            document.getElementById('micPermission').style.display = 'none';
-            
-            // Show audio level indicator
-            document.getElementById('audioLevel').style.display = 'block';
-            
-            // Initialize audio context
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            
-            // Request microphone access
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    microphone = audioContext.createMediaStreamSource(stream);
-                    microphone.connect(analyser);
-                    
-                    scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
-                    analyser.connect(scriptProcessor);
-                    scriptProcessor.connect(audioContext.destination);
-                    
-                    scriptProcessor.addEventListener('audioprocess', processAudio);
-                })
-                .catch(err => {
-                    console.error('Error accessing microphone:', err);
-                    // Show mic button again if there was an error
-                    document.getElementById('micPermission').style.display = 'block';
-                    document.getElementById('audioLevel').style.display = 'none';
-                });
-        }
-        
-        function processAudio(e) {
-            if (houseBurst) return;
-            
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            analyser.getByteFrequencyData(dataArray);
-            
-            // Calculate average volume
-            let sum = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                sum += dataArray[i];
-            }
-            const average = sum / bufferLength;
-            
-            // Update audio level indicator
-            const levelBar = document.getElementById('audioLevelBar');
-            levelBar.style.height = average + '%';
-            
-            // Adjust inflation based on volume
-            const targetInflation = Math.min(100, average * 2);
-            
-            // Smooth changes to inflation
-            inflation = inflation * 0.9 + targetInflation * 0.1;
-            
-            // Apply forces to points based on audio
-            if (average > 10) {
-                const force = average * 0.02;
-                points.forEach(point => {
-                    // Calculate direction from center to point
-                    const centerX = 200;
-                    const centerY = 175;
-                    const dx = point.x - centerX;
-                    const dy = point.y - centerY;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (dist > 0) {
-                        // Normalize and apply force outward
-                        const normalizedX = dx / dist;
-                        const normalizedY = dy / dist;
-                        
-                        point.force.x += normalizedX * force;
-                        point.force.y += normalizedY * force;
-                    }
-                });
-            }
-            
-            // Decrease integrity if inflation is too high
-            if (inflation > 80) {
-                decreaseIntegrity(0.5);
-            }
-        }
-    </script>
-</body>
-</html>
+        function stopDragFragment() {

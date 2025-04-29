@@ -1,170 +1,331 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; cursor: grab; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Casa Globo Interactiva</title>
+<style>
+  body, html {
+    margin: 0; padding: 0; overflow: hidden; background: #000;
+  }
+  canvas {
+    display: block;
+    margin: auto;
+    background: #000;
+  }
+</style>
 </head>
 <body>
-  <script>
-    let mic;
-    let escala = 1;
-    let estaRota = false;
-    let fragmentos = [];
-    let sonidoRuptura;
-    let posX, posY;
-    let velX = 0, velY = 0;
-    let arrastrando = false;
-    let transparencia = 70;
+<audio id="popSound" src="reventar.mp3" preload="auto"></audio>
+<canvas id="canvas" width="800" height="600"></canvas>
 
-    function preload() {
-      // **IMPORTANTE**: Sube tu archivo reventar.mp3 y actualiza la URL
-      sonidoRuptura = loadSound('https://assets.mixkit.co/sfx/preview/mixkit-balloon-pop-with-delay-2350.mp3');
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const popSound = document.getElementById('popSound');
+
+  let mic, audioContext, analyser, dataArray;
+  let inflation = 0; // 0 a 1
+  let dragging = false;
+  let dragOffset = {x: 0, y: 0};
+  let pos = {x: canvas.width/2, y: canvas.height/2};
+  let velocity = {x: 0, y: 0};
+  let isPopped = false;
+  const maxInflation = 1;
+  const popThreshold = 0.9; // cuando inflation supera este valor, revienta
+
+  // Puntos base para la casa (paredes rectas, luego redondeamos)
+  const basePoints = [
+    {x:-80, y:100},
+    {x:-80, y:-40},
+    {x:-40, y:-80},
+    {x:0, y:-100},
+    {x:40, y:-80},
+    {x:80, y:-40},
+    {x:80, y:100},
+  ];
+
+  // Fragmentos para después de reventar
+  let fragments = [];
+
+  // Inicializar micrófono y audio
+  async function initMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      audioContext = new AudioContext();
+      mic = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      mic.connect(analyser);
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+      animate();
+    } catch(e) {
+      alert('Por favor permite el acceso al micrófono.');
     }
+  }
 
-    function setup() {
-      createCanvas(800, 600);
-      background(0);
-      posX = width/2;
-      posY = height/2;
-      
-      mic = new p5.AudioIn();
-      mic.start();
-      
-      // Fragmentos de látex roto
-      for (let i = 0; i < 15; i++) {
-        fragmentos.push({
-          x: random(width),
-          y: random(height),
-          tam: random(20, 60),
-          velX: random(-2, 2),
-          velY: random(-2, 2)
-        });
+  // Función para dibujar la casa con borde redondeado y textura
+  function drawHouse(inflationLevel) {
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+
+    // Escala según inflado
+    const scale = 1 + inflationLevel * 1.5;
+    ctx.scale(scale, scale);
+
+    // Opacidad de la tela (de 0.7 a 0.3)
+    const opacity = 0.7 - inflationLevel * 0.4;
+
+    // Fondo blanco con transparencia variable
+    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+
+    // Comenzamos trazo con curvas para redondear bordes
+    ctx.beginPath();
+    for(let i=0; i<basePoints.length; i++) {
+      const p1 = basePoints[i];
+      const p2 = basePoints[(i+1) % basePoints.length];
+      const midX = (p1.x + p2.x)/2;
+      const midY = (p1.y + p2.y)/2;
+
+      if(i === 0) {
+        ctx.moveTo(p1.x, p1.y);
       }
+      // Curva cuadrática para suavizar borde
+      ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+    }
+    ctx.closePath();
+
+    // Rellenar con textura cuadriculada mate o brillo látex según inflado
+    if(inflationLevel < 0.5) {
+      // Cuadrícula mate (líneas grises)
+      ctx.fill();
+      ctx.strokeStyle = `rgba(150,150,150,${opacity})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // Dibuja cuadrícula
+      ctx.strokeStyle = `rgba(120,120,120,${opacity})`;
+      ctx.lineWidth = 0.5;
+      const gridSize = 15;
+      for(let x = -80; x <= 80; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, -100);
+        ctx.lineTo(x, 100);
+        ctx.stroke();
+      }
+      for(let y = -100; y <= 100; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(-80, y);
+        ctx.lineTo(80, y);
+        ctx.stroke();
+      }
+    } else {
+      // Brillo tipo látex
+      // relleno blanco semi-transparente
+      const grad = ctx.createRadialGradient(0, -40, 20, 0, -40, 80);
+      grad.addColorStop(0, `rgba(255,255,255,${0.6 + 0.4*(inflationLevel-0.5)*2})`);
+      grad.addColorStop(1, `rgba(255,255,255,0)`);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(200,200,200,${opacity})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
 
-    function draw() {
-      background(0);
-      
-      if (!estaRota) {
-        // **Inflado por micrófono**
-        let vol = mic.getLevel();
-        escala = map(vol, 0, 0.3, 1, 2.5, true);
-        transparencia = map(escala, 1, 2.5, 70, 30);
-        
-        // **Movimiento con cursor**
-        if (!arrastrando) {
-          posX += velX;
-          posY += velY;
-          
-          // Rebote en bordes
-          if (posX > width-100 || posX < 100) velX *= -0.9;
-          if (posY > height-120 || posY < 100) velY *= -0.9;
-        }
-        
-        // **Dibujar globo-casa**
-        push();
-        translate(posX, posY);
-        scale(escala);
-        
-        // Cuerpo del globo (blanco con transparencia)
-        fill(255, transparencia);
-        stroke(200);
-        strokeWeight(1);
-        beginShape();
-        vertex(-50, -60); // Parte superior izquierda
-        quadraticVertex(-60, 0, -50, 60); // Curva izquierda
-        vertex(50, 60); // Parte inferior derecha
-        quadraticVertex(60, 0, 50, -60); // Curva derecha
-        endShape(CLOSE);
-        
-        // **Patrón de tela cuadriculada (gris)**
-        stroke(150, 150, 150, transparencia);
-        strokeWeight(0.5);
-        for (let x = -40; x <= 40; x += 10) {
-          line(x, -50, x, 50);
-        }
-        for (let y = -50; y <= 50; y += 10) {
-          line(-40, y, 40, y);
-        }
-        
-        // **Bordado (líneas rojas/café)**
-        stroke(160, 80, 40); // Café
-        strokeWeight(3);
-        noFill();
-        // Marco de la "puerta"
-        rect(-15, -20, 30, 40);
-        // Líneas de puntadas
-        line(-10, -20, -10, 20);
-        line(10, -20, 10, 20);
-        line(-15, 0, 15, 0);
-        
-        // **Brillo tipo látex al inflarse**
-        if (escala > 1.5) {
-          fill(255, 255, 255, 20);
-          noStroke();
-          ellipse(0, -10, 30, 15);
-        }
-        
-        pop();
-        
-        // **Verificar ruptura**
-        if (escala >= 2.3) {
-          estaRota = true;
-          sonidoRuptura.play();
-        }
-      } else {
-        // **Fragmentos de látex roto**
-        fill(255, 180);
-        noStroke();
-        for (let f of fragmentos) {
-          ellipse(f.x, f.y, f.tam);
-          f.x += f.velX;
-          f.y += f.velY;
-          // Rebote fragmentos
-          if (f.x > width || f.x < 0) f.velX *= -1;
-          if (f.y > height || f.y < 0) f.velY *= -1;
-        }
-        textSize(32);
-        fill(255);
-        text("¡REVENTÓ!", width/2 - 80, height/2);
+    // Bordado: líneas gruesas color café o rojo
+    ctx.strokeStyle = `rgba(139,69,19,${opacity})`; // café
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    // Puerta (rectángulo)
+    ctx.moveTo(-20, 100);
+    ctx.lineTo(-20, 40);
+    ctx.lineTo(20, 40);
+    ctx.lineTo(20, 100);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Puntadas verticales dentro de la puerta
+    ctx.beginPath();
+    ctx.moveTo(-10, 40);
+    ctx.lineTo(-10, 100);
+    ctx.moveTo(0, 40);
+    ctx.lineTo(0, 100);
+    ctx.moveTo(10, 40);
+    ctx.lineTo(10, 100);
+    ctx.stroke();
+
+    // Ventanas (dos rectángulos pequeños)
+    ctx.beginPath();
+    ctx.rect(-60, 0, 30, 30);
+    ctx.rect(30, 0, 30, 30);
+    ctx.stroke();
+
+    // Puntadas horizontales en ventanas
+    ctx.beginPath();
+    ctx.moveTo(-60, 15);
+    ctx.lineTo(-30, 15);
+    ctx.moveTo(30, 15);
+    ctx.lineTo(60, 15);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Dibujar fragmentos tras reventar
+  function drawFragments() {
+    fragments.forEach(frag => {
+      ctx.save();
+      ctx.translate(frag.x, frag.y);
+      ctx.rotate(frag.rotation);
+      ctx.fillStyle = `rgba(255,255,255,${frag.opacity})`;
+      ctx.beginPath();
+      ctx.moveTo(frag.points[0].x, frag.points[0].y);
+      for(let i=1; i<frag.points.length; i++) {
+        ctx.lineTo(frag.points[i].x, frag.points[i].y);
       }
-      
-      // **Instrucciones**
-      fill(255);
-      textSize(16);
-      text("Haz ruido para inflar | Arrastra con el cursor", 20, 30);
+      ctx.closePath();
+      ctx.fill();
+
+      // bordado fragmento
+      ctx.strokeStyle = `rgba(139,69,19,${frag.opacity})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.restore();
+
+      // Movimiento fragmentos
+      frag.x += frag.vx;
+      frag.y += frag.vy;
+      frag.rotation += frag.vr;
+      frag.opacity -= 0.005;
+      if(frag.opacity < 0) frag.opacity = 0;
+    });
+    // Limpiar fragmentos invisibles
+    fragments = fragments.filter(f => f.opacity > 0);
+  }
+
+  // Crear fragmentos al reventar
+  function createFragments() {
+    fragments = [];
+    const centerX = pos.x;
+    const centerY = pos.y;
+    for(let i=0; i<10; i++) {
+      fragments.push({
+        x: centerX + Math.random()*40 - 20,
+        y: centerY + Math.random()*40 - 20,
+        rotation: Math.random()*Math.PI*2,
+        vr: (Math.random()-0.5)*0.1,
+        vx: (Math.random()-0.5)*4,
+        vy: (Math.random()-0.5)*4,
+        opacity: 1,
+        points: [
+          {x: -30, y: -30},
+          {x: 30, y: -30},
+          {x: 30, y: 30},
+          {x: -30, y: 30}
+        ]
+      });
+    }
+  }
+
+  // Variables para arrastre
+  function isPointInsideHouse(x, y) {
+    // Aproximamos con rectángulo para simplificar
+    return x > pos.x - 80 && x < pos.x + 80 && y > pos.y - 100 && y < pos.y + 100;
+  }
+
+  let draggingOffset = {x:0, y:0};
+
+  canvas.addEventListener('mousedown', e => {
+    if(!isPopped && isPointInsideHouse(e.offsetX, e.offsetY)) {
+      dragging = true;
+      draggingOffset.x = e.offsetX - pos.x;
+      draggingOffset.y = e.offsetY - pos.y;
+      velocity.x = 0;
+      velocity.y = 0;
+    }
+  });
+
+  canvas.addEventListener('mouseup', e => {
+    dragging = false;
+    // Inercia simple
+    velocity.x = (e.offsetX - pos.x - draggingOffset.x) * 0.2;
+    velocity.y = (e.offsetY - pos.y - draggingOffset.y) * 0.2;
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if(dragging) {
+      pos.x = e.offsetX - draggingOffset.x;
+      pos.y = e.offsetY - draggingOffset.y;
+    }
+  });
+
+  let isPopped = false;
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if(!isPopped) {
+      // Actualizar posición con velocidad y rebote en bordes
+      if(!dragging) {
+        pos.x += velocity.x;
+        pos.y += velocity.y;
+
+        // Rebote en bordes del canvas
+        if(pos.x < 80) { pos.x = 80; velocity.x *= -0.7; }
+        if(pos.x > canvas.width - 80) { pos.x = canvas.width - 80; velocity.x *= -0.7; }
+        if(pos.y < 100) { pos.y = 100; velocity.y *= -0.7; }
+        if(pos.y > canvas.height - 100) { pos.y = canvas.height - 100; velocity.y *= -0.7; }
+        
+        // Fricción
+        velocity.x *= 0.98;
+        velocity.y *= 0.98;
+      }
+
+      // Leer volumen micrófono
+      analyser.getByteTimeDomainData(dataArray);
+      let sum = 0;
+      for(let i=0; i<dataArray.length; i++) {
+        let val = (dataArray[i] - 128)/128;
+        sum += val*val;
+      }
+      let rms = Math.sqrt(sum / dataArray.length);
+      inflation = Math.min(rms * 10, maxInflation);
+
+      // Dibujar la casa inflada
+      drawHouse(inflation);
+
+      // Revisar si revienta
+      if(inflation > popThreshold) {
+        isPopped = true;
+        createFragments();
+        popSound.play();
+      }
+    } else {
+      drawFragments();
     }
 
-    function mousePressed() {
-      if (dist(mouseX, mouseY, posX, posY) < 100 * escala && !estaRota) {
-        arrastrando = true;
-      }
-      if (estaRota) {
-        // Reiniciar
-        estaRota = false;
-        escala = 1;
-        posX = width/2;
-        posY = height/2;
-      }
-    }
+    requestAnimationFrame(animate);
+  }
 
-    function mouseReleased() {
-      arrastrando = false;
-      // Aplicar inercia al soltar
-      velX = (mouseX - pmouseX) * 0.5;
-      velY = (mouseY - pmouseY) * 0.5;
+  // Reinicio con click
+  canvas.addEventListener('click', () => {
+    if(isPopped) {
+      isPopped = false;
+      inflation = 0;
+      pos.x = canvas.width/2;
+      pos.y = canvas.height/2;
+      velocity.x = 0;
+      velocity.y = 0;
+      fragments = [];
     }
+  });
 
-    function mouseDragged() {
-      if (arrastrando) {
-        posX = mouseX;
-        posY = mouseY;
-        velX = velY = 0;
-      }
-    }
-  </script>
+  // Inicialización micrófono y animación
+  initMic();
+
+</script>
 </body>
 </html>
+

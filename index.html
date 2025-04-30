@@ -1,2861 +1,322 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Casa Globo Interactiva</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            background-color: #000000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            touch-action: none; /* Prevenir desplazamiento y zoom en móviles */
-        }
-        
-        #canvas-container {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            height: 100%;
-            max-height: 600px;
-        }
-        
-        canvas {
-            border: 1px solid #333;
-            background-color: #000000;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
-            cursor: pointer;
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-        
-        #restart {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 10px 15px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            display: none;
-            z-index: 100;
-        }
-        
-        #restart:hover {
-            background-color: #45a049;
-        }
-        
-        /* Ajustes para móviles */
-        @media (max-width: 768px) {
-            #canvas-container {
-                width: 100%;
-                height: 80vh;
-            }
-            
-            #restart {
-                padding: 12px 18px;
-                font-size: 16px;
-            }
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Casa Globo Interactiva</title>
+<style>
+  body {
+    margin: 0; padding: 0; overflow: hidden;
+    background-color: #000;
+    display: flex; justify-content: center; align-items: center;
+    height: 100vh;
+    touch-action: none;
+  }
+  #canvas-container {
+    position: relative;
+    width: 800px; height: 600px;
+  }
+  canvas {
+    border: 1px solid #333;
+    background-color: #000;
+    box-shadow: 0 0 15px rgba(255,255,255,0.1);
+    cursor: pointer;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  /* Ocultar textos y botones */
+  #restart, #mic-status, #instructions {
+    display: none !important;
+  }
+</style>
 </head>
 <body>
-    <div id="canvas-container">
-        <canvas id="canvas"></canvas>
-        <button id="restart">Reiniciar</button>
-    </div>
+  <div id="canvas-container">
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <button id="restart">Reiniciar</button>
+    <div id="mic-status">Micrófono: Desactivado</div>
+    <div id="instructions">Instrucciones aquí</div>
+  </div>
+  <audio id="pop-sound" src="reventar.mp3" preload="auto"></audio>
 
-    <audio id="pop-sound" src="reventar.mp3" preload="auto"></audio>
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const popSound = document.getElementById('pop-sound');
 
-    <script>
-        // Variable para almacenar el audio context
-        let audioContext;
-        let analyser;
-        let microphone;
-        let javascriptNode;
-        let audioInitialized = false;
-        
-        // Estado de la casa
-        let casaState = {
-            inflada: true,
-            rota: false,
-            puntos: [],         // Puntos del borde de la casa
-            fragments: [],      // Fragmentos después de reventar
-            dragging: false,
-            dragIndex: -1,
-            dragFragment: null, // Para arrastrar fragmentos
-            lastX: 0,
-            lastY: 0,
-            inflation: 0,       // Nivel de inflado (0-3)
-            opacidad: 1,        // Opacidad de la tela (inversa a inflado)
-            elasticidad: 0.05,  // Qué tan rápido regresa a su forma
-            tensionMax: 150,    // Tensión máxima antes de reventar
-            brillo: 0,          // Nivel de brillo del látex
-            bordeColor: '#8B4513', // Color café para el bordado
-            cursorDistancia: 0, // Distancia del cursor a la casa
-            cursorInteraccion: false, // Si el cursor está interactuando con la casa
-            fragmentsSnapped: 0, // Contador de fragmentos en posición correcta
-            reconstruccionIniciada: false, // Si se ha iniciado la reconstrucción
-            inflateTreshold: 0.8, // Umbral de inflado para reventar - Reducido
-            touchEnabled: 'ontouchstart' in window, // Detectar si es dispositivo táctil
-            devicePixelRatio: window.devicePixelRatio || 1, // Para alta resolución
-            isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
-            lastTouch: null,    // Último evento de toque para evitar doble triggers
-            bounceEffectActive: false, // Control de efecto rebote
-            bounceAmplitude: 0,  // Amplitud del efecto rebote
-            bounceFrequency: 0.2, // Frecuencia del efecto rebote
-            bouncePhase: 0,      // Fase del efecto rebote
-            lastTouchTime: 0,    // Tiempo del último toque para evitar múltiples interacciones
-            gridDistortion: 0,   // Distorsión de la cuadrícula
-            cuadrados: [],       // Cuadrados para efecto de tensión
-            maxInflation: 3,     // Máximo nivel de inflado
-            isBouncingActive: false, // Control del efecto de rebote
-            bounceIntensity: 0    // Intensidad del rebote
-        };
-        
-        // Referencias a elementos del DOM
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const restartButton = document.getElementById('restart');
-        const popSound = document.getElementById('pop-sound');
-        
-        // Ajustar canvas para alta resolución
-        function setupCanvas() {
-            // Obtener el tamaño del contenedor
-            const containerWidth = canvas.parentElement.clientWidth;
-            const containerHeight = canvas.parentElement.clientHeight;
-            
-            // Establecer el tamaño del canvas
-            canvas.style.width = containerWidth + 'px';
-            canvas.style.height = containerHeight + 'px';
-            
-            // Ajustar para alta resolución
-            canvas.width = containerWidth * casaState.devicePixelRatio;
-            canvas.height = containerHeight * casaState.devicePixelRatio;
-            
-            // Escalar el contexto
-            ctx.scale(casaState.devicePixelRatio, casaState.devicePixelRatio);
-        }
-        
-        // Inicializar la forma de la casa con puntos de bordado
-        function initHouse() {
-            // Contorno de la casa con bordes más redondeados
-            casaState.puntos = [];
-            
-            // Calcular centro para adaptarse a cualquier tamaño de pantalla
-            const centerX = canvas.width / (2 * casaState.devicePixelRatio);
-            const centerY = canvas.height / (2 * casaState.devicePixelRatio);
-            const baseWidth = Math.min(canvas.width / casaState.devicePixelRatio, 800) * 0.25;
-            const baseHeight = Math.min(canvas.height / casaState.devicePixelRatio, 600) * 0.35;
-            
-            // Crear puntos de la casa adaptados al tamaño de la pantalla
-            casaState.puntos = [
-                {x: centerX - baseWidth, y: centerY + baseHeight, origX: centerX - baseWidth, origY: centerY + baseHeight},
-                {x: centerX - baseWidth, y: centerY, origX: centerX - baseWidth, origY: centerY},
-                {x: centerX - baseWidth, y: centerY - baseHeight, origX: centerX - baseWidth, origY: centerY - baseHeight},
-                {x: centerX - baseWidth/2, y: centerY - baseHeight*1.25, origX: centerX - baseWidth/2, origY: centerY - baseHeight*1.25},
-                {x: centerX, y: centerY - baseHeight*1.5, origX: centerX, origY: centerY - baseHeight*1.5},
-                {x: centerX + baseWidth/2, y: centerY - baseHeight*1.25, origX: centerX + baseWidth/2, origY: centerY - baseHeight*1.25},
-                {x: centerX + baseWidth, y: centerY - baseHeight, origX: centerX + baseWidth, origY: centerY - baseHeight},
-                {x: centerX + baseWidth, y: centerY, origX: centerX + baseWidth, origY: centerY},
-                {x: centerX + baseWidth, y: centerY + baseHeight, origX: centerX + baseWidth, origY: centerY + baseHeight},
-                {x: centerX - baseWidth, y: centerY + baseHeight, origX: centerX - baseWidth, origY: centerY + baseHeight}
-            ];
-            
-            // Añadir puntos de bordado/costura a lo largo del contorno
-            casaState.puntosCostra = [];
-            for (let i = 0; i < casaState.puntos.length - 1; i++) {
-                const p1 = casaState.puntos[i];
-                const p2 = casaState.puntos[i + 1];
-                const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-                const numPuntos = Math.max(5, Math.floor(dist / 10)); // Un punto cada 10px aprox
-                
-                for (let j = 0; j < numPuntos; j++) {
-                    const t = j / numPuntos;
-                    const x = p1.x + (p2.x - p1.x) * t;
-                    const y = p1.y + (p2.y - p1.y) * t;
-                    
-                    // Añadir pequeña variación aleatoria para dar aspecto más natural
-                    const variacion = 2;
-                    const offsetX = (Math.random() - 0.5) * variacion;
-                    const offsetY = (Math.random() - 0.5) * variacion;
-                    
-                    casaState.puntosCostra.push({
-                        x: x + offsetX,
-                        y: y + offsetY,
-                        size: 1 + Math.random() * 1.5 // Tamaño variable
-                    });
-                }
-            }
-            
-            // Crear cuadrados para el efecto de tensión
-            casaState.cuadrados = [];
-            const gridSize = baseWidth / 5;
-            for (let x = centerX - baseWidth; x < centerX + baseWidth; x += gridSize) {
-                for (let y = centerY - baseHeight; y < centerY + baseHeight; y += gridSize) {
-                    casaState.cuadrados.push({
-                        x: x,
-                        y: y,
-                        size: gridSize,
-                        origX: x,
-                        origY: y,
-                        origSize: gridSize,
-                        tension: 0
-                    });
-                }
-            }
-            
-            casaState.inflation = 0;
-            casaState.opacidad = 1;
-            casaState.brillo = 0;
-            casaState.rota = false;
-            casaState.fragments = [];
-            casaState.fragmentsSnapped = 0;
-            casaState.reconstruccionIniciada = false;
-            casaState.gridDistortion = 0;
-            casaState.bounceIntensity = 0;
-            casaState.isBouncingActive = false;
-        }
-        
-        // Dibujar cuadrícula en la superficie para dar efecto de látex - Solo dentro de la casa
-        function drawGrid(context, points, centerX, centerY, scale = 1) {
-            context.save();
-            
-            // Crear un path para recortar y solo dibujar dentro de la casa
-            context.beginPath();
-            casaState.puntos.forEach((point, i) => {
-                if (i === 0) {
-                    context.moveTo(point.x, point.y);
-                } else {
-                    if (i === 1 || i === casaState.puntos.length - 2) {
-                        // Para el primer y último segmento, usamos línea recta
-                        context.lineTo(point.x, point.y);
-                    } else {
-                        // Para los demás segmentos, usamos curvas
-                        const prev = casaState.puntos[i-1];
-                        const current = point;
-                        
-                        const cp1x = prev.x + (current.x - prev.x) / 3;
-                        const cp1y = prev.y + (current.y - prev.y) / 3;
-                        const cp2x = prev.x + 2 * (current.x - prev.x) / 3;
-                        const cp2y = prev.y + 2 * (current.y - prev.y) / 3;
-                        
-                        // Ajustar los puntos de control según la inflación
-                        const inflateFactor = 1 + casaState.inflation * 0.3;
-                        const midX = (prev.x + current.x) / 2;
-                        const midY = (prev.y + current.y) / 2;
-                        
-                        // Dirección desde el centro hacia el punto medio
-                        const dx = midX - centerX;
-                        const dy = midY - centerY;
-                        const len = Math.sqrt(dx * dx + dy * dy);
-                        
-                        // Ajustar puntos de control para curvar hacia afuera
-                        if (len > 0) {
-                            const inflateX = dx / len * casaState.inflation * 20;
-                            const inflateY = dy / len * casaState.inflation * 20;
-                            
-                            context.bezierCurveTo(
-                                cp1x + inflateX, cp1y + inflateY,
-                                cp2x + inflateX, cp2y + inflateY,
-                                current.x, current.y
-                            );
-                        } else {
-                            context.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, current.x, current.y);
-                        }
-                    }
-                }
-            });
-            context.closePath();
-            context.clip(); // Recortar para limitar el dibujo dentro de la casa
-            
-            // Ajustar la distorsión de la cuadrícula basada en la inflación
-            const distortion = 1 + casaState.inflation * 0.8;
-            
-            context.strokeStyle = `rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2})`;
-            context.lineWidth = 0.5;
-            
-            // Dibujar líneas horizontales y verticales con distorsión basada en inflación
-            const gridSize = 10 * scale;
-            const gridRange = 150 * scale;
-            
-            // Aplicar efecto de rebote si está activo
-            let bounceEffect = 0;
-            if (casaState.isBouncingActive) {
-                bounceEffect = Math.sin(casaState.bouncePhase) * casaState.bounceIntensity;
-            }
-            
-            // Dibujar cuadrícula con distorsión de globo (más circular/ovalada)
-            for (let i = -gridRange; i <= gridRange; i += gridSize) {
-                context.beginPath();
-                
-                // Líneas horizontales con curva hacia afuera (como globo inflándose)
-                for (let x = -gridRange; x <= gridRange; x += 5) {
-                    const normalizedX = x / gridRange; // -1 a 1
-                    const normalizedY = i / gridRange; // -1 a 1
-                    
-                    // Calcular la distorsión basada en la distancia al centro
-                    const distToCenter = Math.sqrt(normalizedX*normalizedX + normalizedY*normalizedY);
-                    const distortionFactor = Math.max(0, 1 - distToCenter) * casaState.inflation;
-                    
-                    // Aplicar distorsión circular
-                    const xPos = centerX + x;
-                    const amplitude = casaState.inflation * 15 * Math.sin(Math.PI * normalizedY);
-                    const yPos = centerY + i + amplitude * distortion + bounceEffect;
-                    
-                    if (x === -gridRange) {
-                        context.moveTo(xPos, yPos);
-                    } else {
-                        context.lineTo(xPos, yPos);
-                    }
-                }
-                context.stroke();
-                
-                // Líneas verticales con distorsión circular
-                context.beginPath();
-                for (let y = -gridRange; y <= gridRange; y += 5) {
-                    const normalizedX = i / gridRange; // -1 a 1
-                    const normalizedY = y / gridRange; // -1 a 1
-                    
-                    // Calcular la distorsión basada en la distancia al centro
-                    const distToCenter = Math.sqrt(normalizedX*normalizedX + normalizedY*normalizedY);
-                    const distortionFactor = Math.max(0, 1 - distToCenter) * casaState.inflation;
-                    
-                    // Aplicar distorsión circular
-                    const yPos = centerY + y;
-                    const amplitude = casaState.inflation * 15 * Math.sin(Math.PI * normalizedX);
-                    const xPos = centerX + i + amplitude * distortion + bounceEffect;
-                    
-                    if (y === -gridRange) {
-                        context.moveTo(xPos, yPos);
-                    } else {
-                        context.lineTo(xPos, yPos);
-                    }
-                }
-                context.stroke();
-            }
-            
-            context.restore();
-        }
-        
-        // Dibujar los cuadrados tensionados bajo la casa
-        function drawTensionSquares(context, centerX, centerY) {
-            context.save();
-            
-            // Obtener el contorno de la casa para limitar los cuadrados
-            const casaPath = new Path2D();
-            casaState.puntos.forEach((point, i) => {
-                if (i === 0) {
-                    casaPath.moveTo(point.x, point.y);
-                } else {
-                    casaPath.lineTo(point.x, point.y);
-                }
-            });
-            casaPath.closePath();
-            
-            // Dibujar cada cuadrado con tensión
-            casaState.cuadrados.forEach(cuadrado => {
-                // Calcular la distancia al centro de la casa
-                const dx = cuadrado.x - centerX;
-                const dy = cuadrado.y - centerY;
-                const distancia = Math.sqrt(dx*dx + dy*dy);
-                const maxDist = Math.sqrt(centerX*centerX + centerY*centerY);
-                
-                // Calcular tensión basada en la distancia y nivel de inflado
-                const tension = Math.max(0, 1 - distancia/maxDist) * casaState.inflation * 1.5;
-                cuadrado.tension = tension;
-                
-                // Aplicar tensión al tamaño del cuadrado (se reduce al estirarse)
-                const newSize = cuadrado.origSize * (1 - tension * 0.3);
-                
-                // Aplicar tensión a la posición (se estira hacia afuera desde el centro)
-                const dirX = dx !== 0 ? dx / Math.abs(dx) : 0;
-                const dirY = dy !== 0 ? dy / Math.abs(dy) : 0;
-                const stretchFactor = tension * 10;
-                
-                const stretchX = dirX * stretchFactor;
-                const stretchY = dirY * stretchFactor;
-                
-                // Saltar si el cuadrado está lejos del borde de la casa
-                if (!context.isPointInPath(casaPath, cuadrado.x, cuadrado.y) && 
-                    !context.isPointInPath(casaPath, cuadrado.x + cuadrado.size, cuadrado.y) &&
-                    !context.isPointInPath(casaPath, cuadrado.x, cuadrado.y + cuadrado.size) &&
-                    !context.isPointInPath(casaPath, cuadrado.x + cuadrado.size, cuadrado.y + cuadrado.size)) {
-                    
-                    // Dibujar cuadrado con tensión
-                    context.strokeStyle = `rgba(150, 150, 150, ${0.1 + tension * 0.5})`;
-                    context.lineWidth = 0.8;
-                    
-                    // Dibujar cuadrado con distorsión radial para simular tensión
-                    context.beginPath();
-                    context.moveTo(cuadrado.x + stretchX, cuadrado.y + stretchY);
-                    context.lineTo(cuadrado.x + newSize + stretchX, cuadrado.y + stretchY);
-                    context.lineTo(cuadrado.x + newSize + stretchX, cuadrado.y + newSize + stretchY);
-                    context.lineTo(cuadrado.x + stretchX, cuadrado.y + newSize + stretchY);
-                    context.closePath();
-                    context.stroke();
-                }
-            });
-            
-            context.restore();
-        }
-        
-        // Dibujar puntadas de bordado realistas
-        function drawStitches(context, points, centerX, centerY, isFragment = false) {
-            context.save();
-            
-            // Configuración para las puntadas
-            if (isFragment) {
-                // Para fragmentos, ajustar el dibujo de las puntadas
-                context.lineWidth = 1.5;
-                context.strokeStyle = casaState.bordeColor;
-                
-                // Dibujar las puntadas como pequeños segmentos inclinados en zigzag
-                context.beginPath();
-                
-                for (let i = 0; i < points.length - 1; i++) {
-                    const p1 = points[i];
-                    const p2 = points[i + 1];
-                    const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-                    const numPuntos = Math.max(3, Math.floor(dist / 5));
-                    
-                    for (let j = 0; j < numPuntos; j++) {
-                        const t1 = j / numPuntos;
-                        const t2 = (j + 0.5) / numPuntos;
-                        
-                        const x1 = p1.x + (p2.x - p1.x) * t1;
-                        const y1 = p1.y + (p2.y - p1.y) * t1;
-                        
-                        const x2 = p1.x + (p2.x - p1.x) * t2;
-                        const y2 = p1.y + (p2.y - p1.y) * t2;
-                        
-                        // Desplazamiento perpendicular para el zigzag
-                        const dx = p2.x - p1.x;
-                        const dy = p2.y - p1.y;
-                        const len = Math.sqrt(dx*dx + dy*dy);
-                        
-                        if (len > 0) {
-                            const perpX = -dy / len * 2;
-                            const perpY = dx / len * 2;
-                            
-                            // Alternar la dirección para zigzag
-                            const dir = j % 2 === 0 ? 1 : -1;
-                            
-                            context.moveTo(x1, y1);
-                            context.lineTo(x2 + perpX * dir, y2 + perpY * dir);
-                        }
-                    }
-                }
-                
-                context.stroke();
-            } else {
-                // Para la casa completa, dibujar puntadas individuales en los puntos predefinidos
-                for (let i = 0; i < casaState.puntosCostra.length; i++) {
-                    const punto = casaState.puntosCostra[i];
-                    const size = punto.size * (1 + casaState.inflation * 0.2);
-                    
-                    // Dibujar el punto con un estilo de puntada cruzada
-                    context.lineWidth = 1.5;
-                    context.strokeStyle = casaState.bordeColor;
-                    
-                    context.beginPath();
-                    context.moveTo(punto.x - size, punto.y - size);
-                    context.lineTo(punto.x + size, punto.y + size);
-                    context.stroke();
-                    
-                    context.beginPath();
-                    context.moveTo(punto.x + size, punto.y - size);
-                    context.lineTo(punto.x - size, punto.y + size);
-                    context.stroke();
-                }
-            }
-            
-            context.restore();
-        }
-        
-        // Dibujar la casa según su estado actual
-        function drawHouse() {
-            ctx.clearRect(0, 0, canvas.width/casaState.devicePixelRatio, canvas.height/casaState.devicePixelRatio);
-            
-            // Obtener el centro ajustado a la pantalla
-            const centerX = canvas.width / (2 * casaState.devicePixelRatio);
-            const centerY = canvas.height / (2 * casaState.devicePixelRatio);
-            
-            // Solo dibujar cuadrados de tensión si no está rota
-            if (!casaState.rota) {
-                // Dibujar los cuadrados tensionados debajo de la casa
-                drawTensionSquares(ctx, centerX, centerY);
-            }
-            
-            if (casaState.rota) {
-                // Dibujar los fragmentos de la casa rota
-                casaState.fragments.forEach(fragment => {
-                    ctx.save();
-                    ctx.translate(fragment.x, fragment.y);
-                    ctx.rotate(fragment.rotation);
-                    
-                    // Efecto de destacado si el fragmento está cerca de su posición original
-                    if (fragment.isSnapped) {
-                        ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
-                        ctx.shadowBlur = 15;
-                    } else if (fragment.isClose) {
-                        ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-                        ctx.shadowBlur = 10;
-                    }
-                    
-                    // Dibujar el fragmento
-                    ctx.beginPath();
-                    fragment.points.forEach((point, i) => {
-                        if (i === 0) {
-                            ctx.moveTo(point.x, point.y);
-                        } else {
-                            ctx.lineTo(point.x, point.y);
-                        }
-                    });
-                    ctx.closePath();
-                    
-                    // Efecto de brillo para látex
-                    const gradientFill = ctx.createRadialGradient(0, 0, 5, 0, 0, 50);
-                    gradientFill.addColorStop(0, `rgba(255, 255, 255, ${0.8 - fragment.transparency})`);
-                    gradientFill.addColorStop(0.7, `rgba(220, 220, 240, ${0.6 - fragment.transparency})`);
-                    gradientFill.addColorStop(1, `rgba(200, 200, 230, ${0.5 - fragment.transparency})`);
-                    ctx.fillStyle = gradientFill;
-                    ctx.fill();
-                    
-                    // Dibujar el contorno del fragmento
-                    ctx.strokeStyle = 'rgba(200, 200, 230, 0.8)';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                    
-                    // Dibujar el bordado con realismo
-                    drawStitches(ctx, fragment.points, 0, 0, true);
-                    
-                    // Dibujar cuadrícula en el fragmento para efecto de látex (solo dentro del fragmento)
-                    // Clip para asegurar que la cuadrícula sólo se vea dentro del fragmento
-                    ctx.save();
-                    ctx.beginPath();
-                    fragment.points.forEach((point, i) => {
-                        if (i === 0) {
-                            ctx.moveTo(point.x, point.y);
-                        } else {
-                            ctx.lineTo(point.x, point.y);
-                        }
-                    });
-                    ctx.closePath();
-                    ctx.clip();
-                    
-                    // Dibujar la cuadrícula
-                    drawGrid(ctx, fragment.points, 0, 0, 0.5);
-                    ctx.restore();
-                    
-                    ctx.restore();
-                });
-                
-                // Si estamos en modo reconstrucción, dibujar guía
-                if (casaState.reconstruccionIniciada) {
-                    ctx.save();
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([5, 5]);
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(centerX - canvas.width/8, centerY + canvas.height/8);
-                    ctx.lineTo(centerX - canvas.width/8, centerY - canvas.height/8);
-                    ctx.bezierCurveTo(
-                        centerX - canvas.width/10, centerY - canvas.height/6, 
-                        centerX - canvas.width/20, centerY - canvas.height/5,
-                        centerX, centerY - canvas.height/4
-                    );
-                    ctx.bezierCurveTo(
-                        centerX + canvas.width/20, centerY - canvas.height/5, 
-                        centerX + canvas.width/10, centerY - canvas.height/6,
-                        centerX + canvas.width/8, centerY - canvas.height/8
-                    );
-                    ctx.lineTo(centerX + canvas.width/8, centerY + canvas.height/8);
-                    ctx.lineTo(centerX - canvas.width/8, centerY + canvas.height/8);
-                    ctx.stroke();
-                    
-                    ctx.restore();
-                }
-            } else {
-                // Calcular el efecto de rebote si está activo
-                let bounceOffsetX = 0;
-                let bounceOffsetY = 0;
-if (casaState.isBouncingActive) {
-                    casaState.bouncePhase += casaState.bounceFrequency;
-                    bounceOffsetX = Math.cos(casaState.bouncePhase) * casaState.bounceIntensity;
-                    bounceOffsetY = Math.sin(casaState.bouncePhase) * casaState.bounceIntensity;
-                    
-                    // Reducir gradualmente la intensidad del rebote
-                    casaState.bounceIntensity *= 0.95;
-                    if (casaState.bounceIntensity < 0.5) {
-                        casaState.isBouncingActive = false;
-                        casaState.bounceIntensity = 0;
-                    }
-                }
-                
-                // Dibujar la silueta llena con efecto de brillo
-                ctx.beginPath();
-                casaState.puntos.forEach((point, i) => {
-                    const adjustedX = point.x + bounceOffsetX;
-                    const adjustedY = point.y + bounceOffsetY;
-                    
-                    if (i === 0) {
-                        ctx.moveTo(adjustedX, adjustedY);
-                    } else {
-                        if (i === 1 || i === casaState.puntos.length - 2) {
-                            // Para el primer y último segmento, usamos línea recta
-                            ctx.lineTo(adjustedX, adjustedY);
-                        } else {
-                            // Para los demás segmentos, hacemos curvas más pronunciadas según inflación
-                            const prev = casaState.puntos[i-1];
-                            const current = point;
-                            
-                            // Calcular puntos de control para la curva
-                            const inflateFactor = 1 + casaState.inflation * 0.5;
-                            
-                            // Obtenemos dirección desde el centro hacia punto medio del segmento
-                            const midX = (prev.x + current.x) / 2;
-                            const midY = (prev.y + current.y) / 2;
-                            const dx = midX - centerX;
-                            const dy = midY - centerY;
-                            const len = Math.sqrt(dx * dx + dy * dy);
-                            
-                            // Ajustar puntos de control para curvar hacia afuera como globo
-                            if (len > 0) {
-                                // Normalizar el vector
-                                const nx = dx / len;
-                                const ny = dy / len;
-                                
-                                // Calcular desplazamiento basado en la inflación y distancia al centro
-                                const inflateAmount = casaState.inflation * 20 * (len / 100);
-                                const inflateX = nx * inflateAmount + bounceOffsetX;
-                                const inflateY = ny * inflateAmount + bounceOffsetY;
-                                
-                                // Puntos de control de Bezier
-                                const cp1x = prev.x + (current.x - prev.x) / 3 + inflateX;
-                                const cp1y = prev.y + (current.y - prev.y) / 3 + inflateY;
-                                const cp2x = prev.x + 2 * (current.x - prev.x) / 3 + inflateX;
-                                const cp2y = prev.y + 2 * (current.y - prev.y) / 3 + inflateY;
-                                
-                                ctx.bezierCurveTo(
-                                    cp1x, cp1y,
-                                    cp2x, cp2y,
-                                    adjustedX, adjustedY
-                                );
-                            } else {
-                                ctx.lineTo(adjustedX, adjustedY);
-                            }
-                        }
-                    }
-                });
-                ctx.closePath();
-                
-                // Estilo de relleno con transparencia según nivel de inflado
-                const opacity = Math.max(0.3, 1 - casaState.inflation * 0.2);
-                casaState.opacidad = opacity;
-                
-                // Crear un gradiente radial para efecto de látex brillante
-                const gradientFill = ctx.createRadialGradient(
-                    centerX, centerY - 20, 10,
-                    centerX, centerY, 150
-                );
-                
-                // Ajustar colores según inflación para parecer más tenso/brillante
-                const brilloInflado = Math.min(0.9, casaState.inflation * 0.3);
-                casaState.brillo = brilloInflado;
-                
-                gradientFill.addColorStop(0, `rgba(255, 255, 255, ${0.9 - opacity * 0.3})`);
-                gradientFill.addColorStop(0.6, `rgba(220, 220, 240, ${0.7 - opacity * 0.3})`);
-                gradientFill.addColorStop(1, `rgba(200, 200, 230, ${0.5 - opacity * 0.3})`);
-                
-                ctx.fillStyle = gradientFill;
-                ctx.fill();
-                
-                // Dibujar la cuadrícula para efecto de látex
-                drawGrid(ctx, casaState.puntos, centerX, centerY);
-                
-                // Dibujar las costuras/bordado alrededor de la casa
-                drawStitches(ctx, casaState.puntos, centerX, centerY);
-                
-                // Dibujar contorno
-                ctx.strokeStyle = 'rgba(200, 200, 230, 0.6)';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-                
-                // Mostrar indicador visual de tensión si está cerca de reventar
-                if (casaState.inflation > casaState.inflateTreshold * 0.8) {
-                    const tensionPercent = (casaState.inflation - casaState.inflateTreshold * 0.8) / 
-                                        (casaState.inflateTreshold * 0.2);
-                    
-                    ctx.save();
-                    ctx.strokeStyle = `rgba(255, 100, 100, ${tensionPercent * 0.5})`;
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([5, 3]);
-                    ctx.stroke();
-                    ctx.restore();
-                    
-                    // Añadir efecto de "estiramiento" en puntos aleatorios cerca del borde
-                    if (Math.random() < tensionPercent * 0.3) {
-                        const randIndex = Math.floor(Math.random() * casaState.puntos.length);
-                        const randPoint = casaState.puntos[randIndex];
-                        
-                        ctx.save();
-                        ctx.globalAlpha = tensionPercent * 0.7;
-                        ctx.beginPath();
-                        
-                        // Dirección desde el centro hacia el punto
-                        const dx = randPoint.x - centerX;
-                        const dy = randPoint.y - centerY;
-                        const len = Math.sqrt(dx*dx + dy*dy);
-                        
-                        if (len > 0) {
-                            const nx = dx / len;
-                            const ny = dy / len;
-                            
-                            const stretchFactor = 5 + Math.random() * 10;
-                            
-                            // Dibujar línea de "estiramiento"
-                            ctx.moveTo(randPoint.x, randPoint.y);
-                            ctx.lineTo(
-                                randPoint.x + nx * stretchFactor,
-                                randPoint.y + ny * stretchFactor
-                            );
-                            
-                            ctx.strokeStyle = 'rgba(255, 100, 100, 0.8)';
-                            ctx.lineWidth = 1;
-                            ctx.stroke();
-                        }
-                        
-                        ctx.restore();
-                    }
-                }
-                
-                // Si está en modo interacción, mostrar efecto de presión
-                if (casaState.cursorInteraccion) {
-                    ctx.save();
-                    ctx.globalAlpha = 0.2;
-                    ctx.beginPath();
-                    ctx.arc(casaState.lastX, casaState.lastY, 20, 0, Math.PI * 2);
-                    ctx.fillStyle = 'white';
-                    ctx.fill();
-                    ctx.restore();
-                }
-            }
-            
-            // Mostrar botón de reinicio si la casa está rota
-            restartButton.style.display = casaState.rota ? 'block' : 'none';
-            
-            // Solicitar siguiente frame
-            requestAnimationFrame(drawHouse);
-        }
-        
-        // Función para crear fragmentos cuando la casa revienta
-        function burstHouse() {
-            // Reproducir sonido pop si está disponible
-            if (popSound) {
-                popSound.currentTime = 0;
-                popSound.play().catch(e => console.log("Audio error:", e));
-            }
-            
-            casaState.rota = true;
-            casaState.fragments = [];
-            
-            // Calcular centro de la casa
-            const centerX = canvas.width / (2 * casaState.devicePixelRatio);
-            const centerY = canvas.height / (2 * casaState.devicePixelRatio);
-            
-            // Crear fragmentos generando formas irregulares
-            const numFragments = casaState.isMobile ? 4 : 6; // Menos fragmentos en móvil
-            
-            // Almacenar puntos del contorno original para referencia
-            const originalPoints = [...casaState.puntos];
-            
-            // Crear fragmentos basados en secciones del contorno original
-            for (let i = 0; i < numFragments; i++) {
-                // Determinar sección del contorno para este fragmento
-                const startIdx = Math.floor(i * (originalPoints.length - 1) / numFragments);
-                const endIdx = Math.floor((i + 1) * (originalPoints.length - 1) / numFragments) + 1;
-                
-                // Copiar puntos de la sección correspondiente
-                const fragmentPoints = [];
-                for (let j = startIdx; j <= endIdx; j++) {
-                    const point = originalPoints[j % originalPoints.length];
-                    // Añadir copia del punto para mantener independencia
-                    fragmentPoints.push({
-                        x: point.x - centerX, 
-                        y: point.y - centerY,
-                        origX: point.x - centerX,
-                        origY: point.y - centerY
-                    });
-                }
-                
-                // Añadir punto adicional hacia el centro para cerrar el fragmento
-                const midPoint = {
-                    x: (fragmentPoints[0].x + fragmentPoints[fragmentPoints.length-1].x) / 2 * 0.5,
-                    y: (fragmentPoints[0].y + fragmentPoints[fragmentPoints.length-1].y) / 2 * 0.5,
-                    origX: (fragmentPoints[0].x + fragmentPoints[fragmentPoints.length-1].x) / 2 * 0.5,
-                    origY: (fragmentPoints[0].y + fragmentPoints[fragmentPoints.length-1].y) / 2 * 0.5
-                };
-                fragmentPoints.push(midPoint);
-                
-                // Calcular vector de dirección desde el centro
-                const endPoint = fragmentPoints[Math.floor(fragmentPoints.length / 2)];
-                const dx = endPoint.x;
-                const dy = endPoint.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                
-                // Normalizar y usar para la "explosión"
-                let dirX = 0, dirY = 0;
-                if (dist > 0) {
-                    dirX = dx / dist;
-                    dirY = dy / dist;
-                }
-                
-                // Velocidad y dirección aleatoria de rotación
-                const fragmentVelocity = 5 + Math.random() * 8;
-                
-                // Crear el fragmento con propiedades físicas para animación
-                casaState.fragments.push({
-                    points: fragmentPoints,
-                    x: centerX, 
-                    y: centerY,
-                    targetX: centerX + dirX * (80 + Math.random() * 150),
-                    targetY: centerY + dirY * (80 + Math.random() * 150),
-                    velX: dirX * fragmentVelocity * (1 + Math.random()),
-                    velY: dirY * fragmentVelocity * (1 + Math.random()),
-                    rotation: Math.random() * Math.PI * 0.2 - Math.PI * 0.1,
-                    angularVel: (Math.random() - 0.5) * 0.2,
-                    transparency: 0,
-                    isClose: false,
-                    isSnapped: false,
-                    originalIndex: i // Para recordar su posición original
-                });
-            }
-            
-            // Iniciar animación de explosión
-            animateExplosion();
-        }
-        
-        // Animación de fragmentos explotando
-        function animateExplosion() {
-            if (!casaState.rota) return;
-            
-            // Animar cada fragmento
-            let allSettled = true;
-            const centerX = canvas.width / (2 * casaState.devicePixelRatio);
-            const centerY = canvas.height / (2 * casaState.devicePixelRatio);
-            
-            for (let i = 0; i < casaState.fragments.length; i++) {
-                const fragment = casaState.fragments[i];
-                
-                // Si el fragmento no está siendo arrastrado, actualizar posición con física
-                if (fragment !== casaState.dragFragment) {
-                    fragment.x += fragment.velX;
-                    fragment.y += fragment.velY;
-                    fragment.rotation += fragment.angularVel;
-                    
-                    // Fricción y gravedad
-                    fragment.velX *= 0.98;
-                    fragment.velY *= 0.98;
-                    fragment.velY += 0.2; // Gravedad
-                    fragment.angularVel *= 0.98; // Fricción angular
-                    
-                    // Aumentar transparencia gradualmente hasta 0.3
-                    if (fragment.transparency < 0.2) {
-                        fragment.transparency += 0.003;
-                    }
-                    
-                    // Verificar si el fragmento está en movimiento
-                    if (Math.abs(fragment.velX) > 0.1 || Math.abs(fragment.velY) > 0.1) {
-                        allSettled = false;
-                    }
-                    
-                    // Verificar si está cerca de su posición inicial (para reconstrucción)
-                    if (casaState.reconstruccionIniciada) {
-                        const distToOrig = Math.sqrt(
-                            Math.pow(fragment.x - centerX, 2) + 
-                            Math.pow(fragment.y - centerY, 2)
-                        );
-                        
-                        fragment.isClose = distToOrig < 80;
-                        
-                        // Si está muy cerca y no está siendo arrastrado, atraer hacia su posición original
-                        if (fragment.isClose && !fragment.isSnapped) {
-                            // Fuerza de atracción hacia el centro
-                            const attractX = (centerX - fragment.x) * 0.03;
-                            const attractY = (centerY - fragment.y) * 0.03;
-                            
-                            fragment.velX += attractX;
-                            fragment.velY += attractY;
-                            
-                            // Reducir rotación
-                            fragment.angularVel *= 0.9;
-                            
-                            // Detectar si llegó a su posición final
-                            if (distToOrig < 20 && Math.abs(fragment.velX) < 0.5 && Math.abs(fragment.velY) < 0.5) {
-                                fragment.isSnapped = true;
-                                fragment.x = centerX;
-                                fragment.y = centerY;
-                                fragment.rotation = 0;
-                                fragment.velX = 0;
-                                fragment.velY = 0;
-                                fragment.angularVel = 0;
-                                casaState.fragmentsSnapped++;
-                            }
-                        }
-                    }
-                    
-                    // Rebotar en los bordes
-                    const maxX = canvas.width / casaState.devicePixelRatio;
-                    const maxY = canvas.height / casaState.devicePixelRatio;
-                    
-                    if (fragment.x < 0) {
-                        fragment.x = 0;
-                        fragment.velX *= -0.7;
-                    } else if (fragment.x > maxX) {
-                        fragment.x = maxX;
-                        fragment.velX *= -0.7;
-                    }
-                    
-                    if (fragment.y < 0) {
-                        fragment.y = 0;
-                        fragment.velY *= -0.7;
-                    } else if (fragment.y > maxY) {
-                        fragment.y = maxY;
-                        fragment.velY *= -0.7;
-                    }
-                }
-            }
-            
-            // Si todos los fragmentos se han detenido y no están siendo reconstruidos, mostrar botón de reinicio
-            if (allSettled && !casaState.reconstruccionIniciada) {
-                restartButton.style.display = 'block';
-            }
-            
-            // Comprobar si la casa ha sido reconstruida completamente
-            if (casaState.fragmentsSnapped === casaState.fragments.length && casaState.reconstruccionIniciada) {
-                // Pequeño retraso para dar feedback visual
-                setTimeout(() => {
-                    resetHouse(); // Reconstruir la casa
-                }, 500);
-                return;
-            }
-            
-            requestAnimationFrame(animateExplosion);
-        }
-        
-        // Iniciar reconstrucción de la casa
-        function startReconstruction() {
-            if (!casaState.rota) return;
-            
-            casaState.reconstruccionIniciada = true;
-            casaState.fragmentsSnapped = 0;
-            
-            // Reiniciar propiedades de los fragmentos
-            casaState.fragments.forEach(fragment => {
-                fragment.isClose = false;
-                fragment.isSnapped = false;
-            });
-            
-            // Ocultar botón de reinicio durante la reconstrucción
-            restartButton.style.display = 'none';
-        }
-        
-        // Resetear la casa a su estado inicial
-        function resetHouse() {
-            initHouse();
-            restartButton.style.display = 'none';
-        }
-        
-        // Evento de clic/touch en la casa
-        function handlePointerDown(e) {
-            e.preventDefault(); // Prevenir comportamiento por defecto
-            
-            // Convertir coordenadas de pantalla a canvas
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / (rect.width * casaState.devicePixelRatio);
-            const scaleY = canvas.height / (rect.height * casaState.devicePixelRatio);
-            
-            // Detectar si es touch o mouse
-            let clientX, clientY;
-            if (e.type === 'touchstart') {
-                // Evitar doble eventos en algunos navegadores
-                if (casaState.lastTouch && 
-                    Date.now() - casaState.lastTouch < 300) {
-                    return;
-                }
-                casaState.lastTouch = Date.now();
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            
-            const x = (clientX - rect.left) * scaleX / casaState.devicePixelRatio;
-            const y = (clientY - rect.top) * scaleY / casaState.devicePixelRatio;
-            
-            // Guardar posición inicial
-            casaState.lastX = x;
-            casaState.lastY = y;
-            
-            if (casaState.rota) {
-                // Verificar si el clic/touch fue en algún fragmento
-                for (let i = casaState.fragments.length - 1; i >= 0; i--) {
-                    const fragment = casaState.fragments[i];
-                    
-                    // Comprobar si el punto está dentro del fragmento (simplificado)
-                    // Transformar coordenadas al espacio del fragmento
-                    const dx = x - fragment.x;
-                    const dy = y - fragment.y;
-                    
-                    // Rotar punto
-                    const cosR = Math.cos(-fragment.rotation);
-                    const sinR = Math.sin(-fragment.rotation);
-                    const rx = dx * cosR - dy * sinR;
-                    const ry = dx * sinR + dy * cosR;
-                    
-                    // Usar una aproximación rectangular para simplificar
-                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                    fragment.points.forEach(point => {
-                        minX = Math.min(minX, point.x);
-                        minY = Math.min(minY, point.y);
-                        maxX = Math.max(maxX, point.x);
-                        maxY = Math.max(maxY, point.y);
-                    });
-                    
-                    // Extender un poco la zona detectable para facilitar la interacción
-                    const padding = 20;
-                    if (rx >= minX - padding && rx <= maxX + padding &&
-                        ry >= minY - padding && ry <= maxY + padding) {
-                        
-                        // Seleccionar este fragmento para arrastrar
-                        casaState.dragging = true;
-                        casaState.dragFragment = fragment;
-                        
-                        // Si el fragmento estaba fijo, liberarlo
-                        if (fragment.isSnapped) {
-                            fragment.isSnapped = false;
-                            casaState.fragmentsSnapped--;
-                        }
-                        
-                        // Iniciar reconstrucción si es el primer fragmento que se arrastra
-                        if (!casaState.reconstruccionIniciada) {
-                            startReconstruction();
-                        }
-                        
-                        break;
-                    }
-                }
-            } else {
-                // Si la casa no está rota, interactuar con ella para inflarla
-                
-                const centerX = canvas.width / (2 * casaState.devicePixelRatio);
-                const centerY = canvas.height / (2 * casaState.devicePixelRatio);
-                
-                // Calcular distancia al centro de la casa
-                const dx = x - centerX;
-                const dy = y - centerY;
-                const distancia = Math.sqrt(dx*dx + dy*dy);
-                
-                // Verificar si el clic/touch fue dentro o cerca de la casa
-                const maxRadio = Math.min(canvas.width, canvas.height) / (3 * casaState.devicePixelRatio);
-                
-                if (distancia < maxRadio) {
-                    // Activar interacción para inflar/desinflar
-                    casaState.dragging = true;
-                    casaState.cursorInteraccion = true;
-                    casaState.cursorDistancia = distancia;
-                    
-                    // Activar efecto de rebote
-                    casaState.isBouncingActive = true;
-                    casaState.bounceIntensity = 5;
-                    casaState.bouncePhase = 0;
-                    
-                    // Inflar la casa (más rápido en dispositivos móviles para compensar problemas táctiles)
-                    const inflationRate = casaState.isMobile ? 0.15 : 0.08;
-                    casaState.inflation += inflationRate;
-                    
-                    // Verificar si la casa debe reventar
-                    if (casaState.inflation >= casaState.inflateTreshold) {
-                        burstHouse();
-                    }
-                }
-            }
-        }
-        
-        // Evento de movimiento de cursor/dedo
-        function handlePointerMove(e) {
-            e.preventDefault();
-            
-            if (!casaState.dragging) return;
-            
-            // Convertir coordenadas
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / (rect.width * casaState.devicePixelRatio);
-            const scaleY = canvas.height / (rect.height * casaState.devicePixelRatio);
-            
-            let clientX, clientY;
-            if (e.type === 'touchmove') {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            
-            const x = (clientX - rect.left) * scaleX / casaState.devicePixelRatio;
-            const y = (clientY - rect.top) * scaleY / casaState.devicePixelRatio;
-            
-            // Calcular delta de movimiento
-            const deltaX = x - casaState.lastX;
-            const deltaY = y - casaState.lastY;
-            
-            // Si estamos arrastrando un fragmento
-            if (casaState.dragFragment) {
-                casaState.dragFragment.x += deltaX;
-                casaState.dragFragment.y += deltaY;
-                
-                // Actualizar velocidad para que tenga inercia
-                casaState.dragFragment.velX = deltaX * 0.8;
-                casaState.dragFragment.velY = deltaY * 0.8;
-            } else if (casaState.cursorInteraccion) {
-                // Interacción con la casa intacta: inflar/distorsionar
-                
-                // Medir distancia recorrida para determinar cuánto inflar
-                const moveDistance = Math.sqrt(deltaX*deltaX + deltaY*deltaY);
-                
-                // Factor de inflado basado en movimiento (más sensible en móvil)
-                const inflationRate = casaState.isMobile ? 0.008 : 0.004;
-                casaState.inflation += moveDistance * inflationRate;
-                
-                // Limitar inflación máxima
-                casaState.inflation = Math.min(casaState.maxInflation, casaState.inflation);
-                
-                // Activar rebote con cada movimiento
-                casaState.isBouncingActive = true;
-                casaState.bounceIntensity = Math.min(8, casaState.bounceIntensity + moveDistance * 0.1);
-                
-                // Comprobar si debe reventar
-                if (casaState.inflation >= casaState.inflateTreshold) {
-                    burstHouse();
-                    casaState.dragging = false;
-                    casaState.cursorInteraccion = false;
-                    return;
-                }
-            }
-            
-            // Actualizar posición actual
-            casaState.lastX = x;
-            casaState.lastY = y;
-        }
-        
-        // Evento de fin de interacción
-        function handlePointerUp(e) {
-            e.preventDefault();
-            
-            casaState.dragging = false;
-            casaState.dragFragment = null;
-            casaState.cursorInteraccion = false;
-            
-            // En dispositivos móviles, mantener un poco la inflación para facilitar interacción
-            if (casaState.isMobile && !casaState.rota) {
-                casaState.inflation *= 0.9; // Reducir un poco pero no completamente
-            }
-        }
-        
-        // Evento para inflar/desinflar con rueda del ratón
-        function handleWheel(e) {
-            e.preventDefault();
-            
-            if (!casaState.rota) {
-                // Determinar dirección del scroll
-                const delta = e.deltaY || -e.wheelDelta || e.detail;
-                const direction = delta > 0 ? 1 : -1;
-                
-                // Ajustar inflación
-                casaState.inflation += direction * 0.1;
-                
-                // Limitar rango
-                casaState.inflation = Math.max(0, Math.min(casaState.maxInflation, casaState.inflation));
-                
-                // Activar rebote
-                casaState.isBouncingActive = true;
-                casaState.bounceIntensity = 3;
-                
-                // Comprobar si debe reventar
-                if (casaState.inflation >= casaState.inflateTreshold) {
-                    burstHouse();
-                }
-            }
-        }
-        
-        // Iniciar audio context al primer clic/tap para evitar restricciones de autoplay
-        function initAudio() {
-            try {
-                if (!audioInitialized && popSound) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    analyser = audioContext.createAnalyser();
-                    
-                    // Conectar nodo JavaScript para procesar audio
-                    javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-                    
-                    // Intentar iniciar audio para efecto pop
-                    const source = audioContext.createMediaElementSource(popSound);
-                    source.connect(analyser);
-                    analyser.connect(javascriptNode);
-                    javascriptNode.connect(audioContext.destination);
-                    source.connect(audioContext.destination);
-                    
-                    audioInitialized = true;
-                }
-            } catch (e) {
-                console.log("Error inicializando audio:", e);
-            }
-        }
-        
-        // Evento del botón de reinicio
-        restartButton.addEventListener('click', resetHouse);
-        
-        // Registrar eventos para mouse/touch
-        canvas.addEventListener('mousedown', handlePointerDown);
-        canvas.addEventListener('mousemove', handlePointerMove);
-        canvas.addEventListener('mouseup', handlePointerUp);
-        canvas.addEventListener('mouseleave', handlePointerUp);
-        
-        // Eventos táctiles
-        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
-        canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
-        canvas.addEventListener('touchend', handlePointerUp, { passive: false });
-        canvas.addEventListener('touchcancel', handlePointerUp, { passive: false });
-        
-        // Evento de rueda para inflar/desinflar
-        canvas.addEventListener('wheel', handleWheel, { passive: false });
-        
-        // Ajustar canvas al redimensionar ventana
-        window.addEventListener('resize', () => {
-            setupCanvas();
-            // Resetear casa para adaptarse al nuevo tamaño
-            if (!casaState.rota) {
-                initHouse();
-            }
+  const casaState = {
+    inflada: true,
+    rota: false,
+    puntos: [],
+    puntosCostra: [],
+    fragments: [],
+    dragging: false,
+    dragIndex: -1,
+    dragFragment: null,
+    lastX: 0,
+    lastY: 0,
+    inflation: 0,       // 0..3 máximo
+    opacidad: 1,
+    elasticidad: 0.05,
+    tensionMax: 150,
+    brillo: 0,
+    bordeColor: '#8B4513',
+    cursorDistancia: 0,
+    cursorInteraccion: false,
+    fragmentsSnapped: 0,
+    reconstruccionIniciada: false,
+    bouncePhase: 0,
+    bounceIntensity: 0,
+    isBouncingActive: false,
+    devicePixelRatio: window.devicePixelRatio || 1,
+  };
+
+  function setupCanvas() {
+    const containerWidth = canvas.parentElement.clientWidth;
+    const containerHeight = canvas.parentElement.clientHeight;
+    canvas.style.width = containerWidth + 'px';
+    canvas.style.height = containerHeight + 'px';
+    canvas.width = containerWidth * casaState.devicePixelRatio;
+    canvas.height = containerHeight * casaState.devicePixelRatio;
+    ctx.scale(casaState.devicePixelRatio, casaState.devicePixelRatio);
+  }
+
+  function initHouse() {
+    const centerX = canvas.width / (2 * casaState.devicePixelRatio);
+    const centerY = canvas.height / (2 * casaState.devicePixelRatio);
+    const baseWidth = Math.min(canvas.width / casaState.devicePixelRatio, 800) * 0.25;
+    const baseHeight = Math.min(canvas.height / casaState.devicePixelRatio, 600) * 0.35;
+
+    casaState.puntos = [
+      {x: centerX - baseWidth, y: centerY + baseHeight, origX: centerX - baseWidth, origY: centerY + baseHeight},
+      {x: centerX - baseWidth, y: centerY, origX: centerX - baseWidth, origY: centerY},
+      {x: centerX - baseWidth, y: centerY - baseHeight, origX: centerX - baseWidth, origY: centerY - baseHeight},
+      {x: centerX - baseWidth/2, y: centerY - baseHeight*1.25, origX: centerX - baseWidth/2, origY: centerY - baseHeight*1.25},
+      {x: centerX, y: centerY - baseHeight*1.5, origX: centerX, origY: centerY - baseHeight*1.5},
+      {x: centerX + baseWidth/2, y: centerY - baseHeight*1.25, origX: centerX + baseWidth/2, origY: centerY - baseHeight*1.25},
+      {x: centerX + baseWidth, y: centerY - baseHeight, origX: centerX + baseWidth, origY: centerY - baseHeight},
+      {x: centerX + baseWidth, y: centerY, origX: centerX + baseWidth, origY: centerY},
+      {x: centerX + baseWidth, y: centerY + baseHeight, origX: centerX + baseWidth, origY: centerY + baseHeight},
+      {x: centerX - baseWidth, y: centerY + baseHeight, origX: centerX - baseWidth, origY: centerY + baseHeight}
+    ];
+
+    casaState.puntosCostra = [];
+    for (let i = 0; i < casaState.puntos.length - 1; i++) {
+      const p1 = casaState.puntos[i];
+      const p2 = casaState.puntos[i + 1];
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const numPuntos = Math.max(5, Math.floor(dist / 10));
+      for (let j = 0; j < numPuntos; j++) {
+        const t = j / numPuntos;
+        const x = p1.x + (p2.x - p1.x) * t;
+        const y = p1.y + (p2.y - p1.y) * t;
+        const variacion = 2;
+        const offsetX = (Math.random() - 0.5) * variacion;
+        const offsetY = (Math.random() - 0.5) * variacion;
+        casaState.puntosCostra.push({
+          x: x + offsetX,
+          y: y + offsetY,
+          size: 1 + Math.random() * 1.5
         });
-        
-        // Inicializar
-function init() {
-    // Configurar canvas
-    setupCanvas();
-    // Inicializar casa
-    initHouse();
-    // Iniciar bucle de dibujo
-    drawHouse();
-    
-    // Intentar precargar sonido
-    if (!popSound) {
-        popSound = new Audio('pop.mp3');
-        popSound.addEventListener('canplaythrough', function() {
-            console.log("Sound loaded");
-        });
+      }
     }
-    
-    // Mostrar instrucciones dependiendo del dispositivo
-    const instructionsText = casaState.isMobile ? 
-        "Toca y mueve para inflar la casa. ¡Intenta reconstruirla si explota!" : 
-        "Haz clic y mueve el ratón para inflar la casa. Usa la rueda del ratón también. ¡Intenta reconstruirla si explota!";
-    
-    instructions.textContent = instructionsText;
-    
-    // Ocultar instrucciones después de unos segundos
-    setTimeout(() => {
-        if (instructions.style.opacity !== "0") {
-            instructions.style.opacity = "0";
-        }
-    }, 5000);
-}
 
-// Optimizaciones para dispositivos móviles
-function optimizeForMobile() {
-    if (casaState.isMobile) {
-        // Aumentar sensibilidad de inflado en dispositivos móviles
-        casaState.inflateSensitivity = 2.5; // Mayor sensibilidad
-        // Reducir umbral para que sea más fácil inflar completamente
-        casaState.inflateTreshold = 2.8;
-        // Hacer que la casa se infle más rápido con cada toque
-        casaState.inflateSpeed = 0.25;
-        // Reducir fricción para que mantenga el rebote más tiempo
-        casaState.frictionFactor = 0.98;
-        // Aumentar intensidad visual del efecto de presión
-        casaState.touchEffectSize = 30;
-        // Menos puntos para el contorno de la casa (mejor rendimiento)
-        casaState.vertexCount = 15;
-    } else {
-        // Configuración estándar para desktop
-        casaState.inflateSensitivity = 1.0;
-        casaState.inflateTreshold = 3.0;
-        casaState.inflateSpeed = 0.08;
-        casaState.frictionFactor = 0.95;
-        casaState.touchEffectSize = 20;
-        casaState.vertexCount = 20;
-    }
-}
-
-// Función para dibujar la cuadrícula con efecto de tensión
-function drawGrid(ctx, points, centerX, centerY) {
-    // No dibujar la cuadrícula si está muy inflada (para evitar las líneas no deseadas)
-    if (casaState.inflation > casaState.inflateTreshold * 0.8) {
-        return;
-    }
-    
-    const gridSize = 15;
-    const houseBounds = getHouseBounds(points);
-    const width = houseBounds.maxX - houseBounds.minX;
-    const height = houseBounds.maxY - houseBounds.minY;
-    
-    // Calcular distorsión basada en inflamación
-    const distortion = casaState.inflation * 0.5;
-    
-    ctx.save();
-    ctx.globalAlpha = Math.max(0.1, 0.5 - casaState.inflation * 0.15);
-    ctx.strokeStyle = 'rgba(100, 100, 150, 0.3)';
-    ctx.lineWidth = 0.5;
-    
-    // Líneas horizontales
-    for (let y = houseBounds.minY; y <= houseBounds.maxY; y += gridSize) {
-        ctx.beginPath();
-        for (let x = houseBounds.minX; x <= houseBounds.maxX; x += 2) {
-            // Calcular distancia al centro
-            const dx = x - centerX;
-            const dy = y - centerY;
-            const distance = Math.sqrt(dx*dx + dy*dy);
-            
-            // Aplicar distorsión basada en distancia y nivel de inflado
-            // Función más suave para crear efecto de "globo de agua"
-            const factor = 1 + distortion * Math.pow(Math.max(0, 1 - distance / 100), 2);
-            
-            const newX = centerX + dx * factor;
-            const newY = centerY + dy * factor;
-            
-            if (x === houseBounds.minX) {
-                ctx.moveTo(newX, newY);
-            } else {
-                ctx.lineTo(newX, newY);
-            }
-        }
-        ctx.stroke();
-    }
-    
-    // Líneas verticales
-    for (let x = houseBounds.minX; x <= houseBounds.maxX; x += gridSize) {
-        ctx.beginPath();
-        for (let y = houseBounds.minY; y <= houseBounds.maxY; y += 2) {
-            // Distorsión similar a las líneas horizontales
-            const dx = x - centerX;
-            const dy = y - centerY;
-            const distance = Math.sqrt(dx*dx + dy*dy);
-            
-            const factor = 1 + distortion * Math.pow(Math.max(0, 1 - distance / 100), 2);
-            
-            const newX = centerX + dx * factor;
-            const newY = centerY + dy * factor;
-            
-            if (y === houseBounds.minY) {
-                ctx.moveTo(newX, newY);
-            } else {
-                ctx.lineTo(newX, newY);
-            }
-        }
-        ctx.stroke();
-    }
-    
-    ctx.restore();
-}
-
-// Obtener límites de la casa para dibujar la cuadrícula
-function getHouseBounds(points) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    
-    points.forEach(point => {
-        minX = Math.min(minX, point.x);
-        minY = Math.min(minY, point.y);
-        maxX = Math.max(maxX, point.x);
-        maxY = Math.max(maxY, point.y);
-    });
-    
-    // Añadir un margen para que la cuadrícula sea un poco más grande que la casa
-    const margin = 5;
-    return {
-        minX: minX - margin,
-        minY: minY - margin,
-        maxX: maxX + margin,
-        maxY: maxY + margin
-    };
-}
-
-// Dibujar costuras o bordado alrededor de la casa
-function drawStitches(ctx, points, centerX, centerY) {
-    ctx.save();
-    
-    // Ajustar opacidad basada en nivel de inflado
-    ctx.globalAlpha = Math.max(0.4, 0.8 - casaState.inflation * 0.2);
-    ctx.strokeStyle = 'rgba(80, 80, 120, 0.7)';
-    ctx.lineWidth = 2;
-    
-    // Dibujar las costuras como pequeños trazos alrededor del contorno
-    const stitchLength = 4;
-    const stitchGap = 3;
-    
-    ctx.beginPath();
-    ctx.setLineDash([stitchLength, stitchGap]);
-    
-    // Dibujar siguiendo los puntos del contorno
-    for (let i = 0; i < points.length; i++) {
-        const point = points[i];
-        const nextPoint = points[(i + 1) % points.length];
-        
-        // Añadir efecto de distorsión a las costuras basado en inflación
-        const inflationEffect = casaState.inflation * 0.05;
-        
-        // Vector hacia el centro
-        const toCenterX = centerX - point.x;
-        const toCenterY = centerY - point.y;
-        const dist = Math.sqrt(toCenterX*toCenterX + toCenterY*toCenterY);
-        
-        // Punto ajustado con distorsión
-        let adjustedX1 = point.x;
-        let adjustedY1 = point.y;
-        let adjustedX2 = nextPoint.x;
-        let adjustedY2 = nextPoint.y;
-        
-        // Aplicar distorsión solo si hay distancia suficiente
-        if (dist > 0) {
-            // Normalizar vector
-            const nx = toCenterX / dist;
-            const ny = toCenterY / dist;
-            
-            // Aplicar distorsión inversamente proporcional a la distancia
-            // (para efecto de "globo de agua")
-            const factor = inflationEffect * Math.pow(Math.max(0, 1 - dist / 150), 2) * 80;
-            
-            adjustedX1 -= nx * factor;
-            adjustedY1 -= ny * factor;
-            adjustedX2 -= nx * factor;
-            adjustedY2 -= ny * factor;
-        }
-        
-        if (i === 0) {
-            ctx.moveTo(adjustedX1, adjustedY1);
-        }
-        
-        ctx.lineTo(adjustedX2, adjustedY2);
-    }
-    
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-}
-
-// Personalizar forma inicial de la casa
-function createHouseShape(centerX, centerY, size) {
-    // Crear forma básica de casa con techo triangular
-    const points = [];
-    const width = size * 0.8;
-    const height = size * 0.9;
-    const baseY = centerY + height * 0.3;
-    
-    // Base de la casa (más puntos para mejor distorsión)
-    const basePoints = casaState.vertexCount; // Ajustar según rendimiento
-    
-    // Crear puntos para la base y paredes
-    for (let i = 0; i < basePoints; i++) {
-        const angle = Math.PI + (Math.PI * i) / (basePoints - 1);
-        const x = centerX + Math.cos(angle) * width;
-        const y = baseY + Math.sin(angle) * (height * 0.6);
-        points.push({x, y});
-    }
-    
-    // Puntos para el techo
-    points.push({x: centerX - width, y: baseY - height * 0.3});
-    points.push({x: centerX, y: baseY - height * 0.9});
-    points.push({x: centerX + width, y: baseY - height * 0.3});
-    
-    return points;
-}
-
-// Gestionar mezcla suave entre estados de inflación
-function applyInflationEffect(points, centerX, centerY) {
-    const inflationFactor = casaState.inflation;
-    
-    // Transformar la casa hacia una forma más circular/ovalada según inflación
-    for (let i = 0; i < points.length; i++) {
-        const point = casaState.originalPuntos[i];
-        const currentPoint = points[i];
-        
-        // Vector desde el centro al punto original
-        const dx = point.x - centerX;
-        const dy = point.y - centerY;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        
-        if (dist > 0) {
-            // Normalizar vector
-            const nx = dx / dist;
-            const ny = dy / dist;
-            
-            // Aplicar inflación no lineal (más como un globo de agua)
-            // La inflación es mayor en puntos más alejados del centro
-            const inflateAmount = inflationFactor * Math.pow(dist / 50, 0.7) * 15;
-            
-            // Combinar forma original con forma inflada
-            currentPoint.x = point.x + nx * inflateAmount;
-            currentPoint.y = point.y + ny * inflateAmount;
-        }
-    }
-}
-
-// Mejorar manejo de eventos táctiles
-function setupTouchHandling() {
-    // Evitar el scroll/zoom del navegador cuando se interactúa con el canvas
-    document.body.addEventListener('touchstart', function(e) {
-        if (e.target === canvas) {
-            e.preventDefault();
-        }
-    }, { passive: false });
-    
-    // Mejorar detección de doble toque
-    let lastTapTime = 0;
-    canvas.addEventListener('touchstart', function(e) {
-        const now = Date.now();
-        const timeDiff = now - lastTapTime;
-        
-        if (timeDiff < 300 && timeDiff > 0) {
-            // Doble toque detectado - inflar rápidamente
-            casaState.inflation += casaState.inflateSpeed * 2;
-            e.preventDefault();
-            
-            // Activar rebote más intenso en doble toque
-            casaState.isBouncingActive = true;
-            casaState.bounceIntensity = 8;
-            casaState.bounceFrequency = 0.2;
-            
-            // Comprobar si debe reventar
-            if (casaState.inflation >= casaState.inflateTreshold) {
-                burstHouse();
-            }
-        }
-        
-        lastTapTime = now;
-    }, { passive: false });
-}
-
-// Inicio principal
-window.onload = function() {
-    // Detectar si es dispositivo móvil
-    casaState.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // Aplicar optimizaciones para móviles
-    optimizeForMobile();
-    
-    // Mejorar manejo de eventos táctiles
-    setupTouchHandling();
-    
-    // Iniciar
-    init();
-    
-    // Mostrar instrucciones brevemente
-    instructions.style.opacity = "1";
-};
-// Mejorar comportamiento de rebote de la casa
-function applyBounceEffect() {
-    if (!casaState.isBouncingActive) return;
-    
-    // Tiempo transcurrido para el rebote
-    const now = Date.now();
-    const elapsed = (now - casaState.lastBounceTime) / 1000;
-    casaState.lastBounceTime = now;
-    
-    // Actualizar fase de rebote
-    casaState.bouncePhase += elapsed * casaState.bounceFrequency * Math.PI * 2;
-    
-    // Aplicar efecto de rebote
-    const bounceValue = Math.sin(casaState.bouncePhase) * casaState.bounceIntensity;
-    
-    // Reducir la intensidad gradualmente
-    casaState.bounceIntensity *= 0.95;
-    
-    // Detener el rebote cuando sea muy pequeño
-    if (casaState.bounceIntensity < 0.1) {
-        casaState.isBouncingActive = false;
-        casaState.bounceIntensity = 0;
-    }
-    
-    // Aplicar el rebote al tamaño de la casa
-    casaState.currentSize = casaState.baseSize + bounceValue;
-    
-    // Aplicar efecto de "respiración" cuando no está rebotando
-    if (!casaState.isBouncingActive) {
-        const breathEffect = Math.sin(Date.now() / 1000) * 2;
-        casaState.currentSize = casaState.baseSize + breathEffect;
-    }
-}
-
-// Mejorar sensibilidad táctil para dispositivos móviles
-function enhanceTouchResponse() {
-    // Aumentar sensibilidad general para móviles
-    if (casaState.isMobile) {
-        // Aumentar la velocidad de inflado en móviles
-        casaState.inflateSpeed = 0.35; // Incrementado desde 0.25
-        
-        // Hacer que la respuesta sea más inmediata
-        casaState.touchResponseDelay = 10; // Millisegundos
-        
-        // Aumentar el área de detección de toque
-        casaState.touchDetectionRadius = 40;
-        
-        // Reducir el umbral para reventar
-        casaState.inflateTreshold = 2.5; // Reducido desde 2.8
-    }
-}
-
-// Corregir el problema de reventado prematuro
-function fixPrematureBurst() {
-    // Solo permitir reventar cuando la inflación supere el umbral real
-    if (casaState.inflation >= casaState.inflateTreshold) {
-        burstHouse();
-    } else if (casaState.inflation < 0.5) {
-        // Evitar reventado cuando la inflación es muy baja
-        casaState.canBurst = false;
-    } else {
-        casaState.canBurst = true;
-    }
-}
-
-// Actualizar función de dibujo para mejorar la visualización
-function updateDrawingFunctions() {
-    // Mejorar la función de dibujo de la casa
-    casaState.drawHouse = function() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Aplicar efectos de rebote
-        applyBounceEffect();
-        
-        // Dibujar efecto de cuadrícula solo cuando la inflación es baja a media
-        if (casaState.inflation < casaState.inflateTreshold * 0.7) {
-            drawGrid(ctx, casaState.puntos, casaState.centerX, casaState.centerY);
-        }
-        
-        // Dibujar la casa con transición suave entre formas
-        drawHouseShape(ctx, casaState.puntos, casaState.centerX, casaState.centerY);
-        
-        // Dibujar costuras solo cuando no está muy inflada
-        if (casaState.inflation < casaState.inflateTreshold * 0.85) {
-            drawStitches(ctx, casaState.puntos, casaState.centerX, casaState.centerY);
-        }
-        
-        // Dibujar detalles de la casa (puerta, ventanas)
-        drawHouseDetails();
-        
-        // Dibujar efecto de presión donde está el cursor/toque
-        if (casaState.isPointerActive) {
-            drawPressureEffect(casaState.pointerX, casaState.pointerY);
-        }
-        
-        // Comprobar si debe reventar
-        fixPrematureBurst();
-        
-        // Aplicar fricción al movimiento
-        casaState.inflation *= casaState.frictionFactor;
-        
-        // Solicitar el siguiente frame
-        requestAnimationFrame(casaState.drawHouse);
-    };
-}
-
-// Mejorar el dibujo de la forma de la casa para que se vea más como un globo de agua
-function drawHouseShape(ctx, points, centerX, centerY) {
-    // Aplicar el efecto de inflación
-    applyInflationEffect(points, centerX, centerY);
-    
-    ctx.save();
-    
-    // Color principal de la casa
-    const baseColor = 'rgba(180, 200, 255, 0.9)';
-    const inflatedColor = 'rgba(130, 160, 250, 0.9)';
-    
-    // Mezclar colores según nivel de inflación
-    const mixFactor = Math.min(1, casaState.inflation / casaState.inflateTreshold);
-    const r = Math.round(180 - 50 * mixFactor);
-    const g = Math.round(200 - 40 * mixFactor);
-    const b = Math.round(255 - 5 * mixFactor);
-    
-    // Crear degradado radial para simular volumen
-    const gradient = ctx.createRadialGradient(
-        centerX, centerY, 10,
-        centerX, centerY, 150
-    );
-    gradient.addColorStop(0, `rgba(${r+20}, ${g+20}, ${b+10}, 0.9)`);
-    gradient.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, 0.9)`);
-    gradient.addColorStop(1, `rgba(${r-20}, ${g-20}, ${b-10}, 0.9)`);
-    
-    ctx.fillStyle = gradient;
-    ctx.strokeStyle = 'rgba(100, 120, 180, 0.7)';
-    ctx.lineWidth = 1.5;
-    
-    // Dibujar la forma de la casa con curvas suaves
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    
-    // Usar curvas bezier para suavizar el contorno
-    for (let i = 0; i < points.length; i++) {
-        const p0 = points[i];
-        const p1 = points[(i + 1) % points.length];
-        const p2 = points[(i + 2) % points.length];
-        
-        // Calcular puntos de control para la curva
-        const cp1x = p0.x + (p1.x - p0.x) * 0.5;
-        const cp1y = p0.y + (p1.y - p0.y) * 0.5;
-        const cp2x = p1.x + (p2.x - p1.x) * 0.5;
-        const cp2y = p1.y + (p2.y - p1.y) * 0.5;
-        
-        // Dibujar curva bezier
-        ctx.quadraticCurveTo(p1.x, p1.y, cp2x, cp2y);
-    }
-    
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    
-    // Añadir brillos para dar sensación de volumen
-    addHighlights(ctx, points, centerX, centerY);
-    
-    ctx.restore();
-}
-
-// Añadir brillos para dar efecto de volumen
-function addHighlights(ctx, points, centerX, centerY) {
-    // Solo añadir brillos cuando la inflación es media-alta
-    if (casaState.inflation < 0.5) return;
-    
-    // Calcular posición del brillo basada en la inflación
-    const highlightX = centerX - 30 + casaState.inflation * 5;
-    const highlightY = centerY - 20 - casaState.inflation * 10;
-    
-    // Crear degradado para el brillo
-    const highlight = ctx.createRadialGradient(
-        highlightX, highlightY, 5,
-        highlightX, highlightY, 40 + casaState.inflation * 20
-    );
-    
-    highlight.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
-    highlight.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
-    highlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    
-    ctx.fillStyle = highlight;
-    ctx.beginPath();
-    ctx.arc(highlightX, highlightY, 40 + casaState.inflation * 20, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Añadir un segundo brillo más pequeño
-    const highlight2X = centerX + 20;
-    const highlight2Y = centerY - 30;
-    
-    const highlight2 = ctx.createRadialGradient(
-        highlight2X, highlight2Y, 2,
-        highlight2X, highlight2Y, 20
-    );
-    
-    highlight2.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-    highlight2.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    
-    ctx.fillStyle = highlight2;
-    ctx.beginPath();
-    ctx.arc(highlight2X, highlight2Y, 20, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-// Mejorar el efecto de presión al tocar/hacer clic
-function drawPressureEffect(x, y) {
-    ctx.save();
-    
-    // Efecto de onda de presión
-    const pressureGradient = ctx.createRadialGradient(
-        x, y, 1,
-        x, y, casaState.touchEffectSize
-    );
-    
-    // Ajustar opacidad según nivel de inflación
-    const alpha = Math.max(0.1, 0.5 - casaState.inflation * 0.1);
-    
-    pressureGradient.addColorStop(0, `rgba(100, 150, 255, ${alpha})`);
-    pressureGradient.addColorStop(0.6, `rgba(150, 200, 255, ${alpha * 0.5})`);
-    pressureGradient.addColorStop(1, 'rgba(200, 230, 255, 0)');
-    
-    ctx.fillStyle = pressureGradient;
-    ctx.beginPath();
-    ctx.arc(x, y, casaState.touchEffectSize, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Añadir efecto de ondas expansivas
-    const now = Date.now();
-    casaState.pressureWaves.forEach((wave, index) => {
-        const age = now - wave.startTime;
-        const size = wave.baseSize + age * 0.05;
-        const opacity = Math.max(0, 0.5 - age * 0.001);
-        
-        if (opacity <= 0) {
-            casaState.pressureWaves.splice(index, 1);
-            return;
-        }
-        
-        ctx.strokeStyle = `rgba(100, 150, 255, ${opacity})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(wave.x, wave.y, size, 0, Math.PI * 2);
-        ctx.stroke();
-    });
-    
-    ctx.restore();
-}
-
-// Mejorar el manejo de eventos táctiles para que sea más sensible
-function enhancedTouchEvents() {
-    // Eventos de toque específicos para móviles
-    canvas.addEventListener('touchstart', handleTouchStart, {passive: false});
-    canvas.addEventListener('touchmove', handleTouchMove, {passive: false});
-    canvas.addEventListener('touchend', handleTouchEnd, {passive: false});
-    
-    // Eventos de ratón para desktop
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('wheel', handleMouseWheel, {passive: false});
-}
-
-// Manejadores de eventos táctiles mejorados
-function handleTouchStart(e) {
-    e.preventDefault();
-    casaState.isPointerActive = true;
-    
-    // Obtener posición del toque
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    casaState.pointerX = touch.clientX - rect.left;
-    casaState.pointerY = touch.clientY - rect.top;
-    
-    // Iniciar efecto de rebote
-    triggerBounceEffect();
-    
-    // Añadir onda de presión
-    addPressureWave(casaState.pointerX, casaState.pointerY);
-    
-    // Inflar la casa
-    inflateBalloon(casaState.pointerX, casaState.pointerY);
-}
-
-function handleTouchMove(e) {
-    if (!casaState.isPointerActive) return;
-    e.preventDefault();
-    
-    // Obtener posición del toque
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    casaState.pointerX = touch.clientX - rect.left;
-    casaState.pointerY = touch.clientY - rect.top;
-    
-    // Inflar la casa según la velocidad del movimiento
-    const now = Date.now();
-    if (now - casaState.lastTouchMoveTime > casaState.touchResponseDelay) {
-        casaState.lastTouchMoveTime = now;
-        
-        // Calcular velocidad del movimiento
-        if (casaState.lastPointerX !== null) {
-            const dx = casaState.pointerX - casaState.lastPointerX;
-            const dy = casaState.pointerY - casaState.lastPointerY;
-            const speed = Math.sqrt(dx*dx + dy*dy);
-            
-            // Inflar según velocidad
-            const inflateAmount = Math.min(0.1, speed * 0.005) * casaState.inflateSensitivity;
-            casaState.inflation += inflateAmount;
-            
-            // Añadir onda de presión con probabilidad
-            if (Math.random() < 0.2) {
-                addPressureWave(casaState.pointerX, casaState.pointerY);
-            }
-        }
-        
-        casaState.lastPointerX = casaState.pointerX;
-        casaState.lastPointerY = casaState.pointerY;
-    }
-    
-    // Inflar la casa
-    inflateBalloon(casaState.pointerX, casaState.pointerY);
-}
-
-function handleTouchEnd(e) {
-    e.preventDefault();
-    casaState.isPointerActive = false;
-    casaState.lastPointerX = null;
-    casaState.lastPointerY = null;
-}
-
-// Funciones mejoradas para manejo de ratón
-function handleMouseDown(e) {
-    casaState.isPointerActive = true;
-    
-    const rect = canvas.getBoundingClientRect();
-    casaState.pointerX = e.clientX - rect.left;
-    casaState.pointerY = e.clientY - rect.top;
-    
-    // Iniciar efecto de rebote
-    triggerBounceEffect();
-    
-    // Añadir onda de presión
-    addPressureWave(casaState.pointerX, casaState.pointerY);
-    
-    // Inflar la casa
-    inflateBalloon(casaState.pointerX, casaState.pointerY);
-}
-
-function handleMouseMove(e) {
-    if (!casaState.isPointerActive) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    casaState.pointerX = e.clientX - rect.left;
-    casaState.pointerY = e.clientY - rect.top;
-    
-    // Inflar la casa según la velocidad del movimiento
-    const now = Date.now();
-    if (now - casaState.lastMouseMoveTime > 10) {
-        casaState.lastMouseMoveTime = now;
-        
-        // Calcular velocidad del movimiento
-        if (casaState.lastPointerX !== null) {
-            const dx = casaState.pointerX - casaState.lastPointerX;
-            const dy = casaState.pointerY - casaState.lastPointerY;
-            const speed = Math.sqrt(dx*dx + dy*dy);
-            
-            // Inflar según velocidad
-            const inflateAmount = Math.min(0.05, speed * 0.002) * casaState.inflateSensitivity;
-            casaState.inflation += inflateAmount;
-            
-            // Añadir onda de presión con probabilidad
-            if (Math.random() < 0.1) {
-                addPressureWave(casaState.pointerX, casaState.pointerY);
-            }
-        }
-        
-        casaState.lastPointerX = casaState.pointerX;
-        casaState.lastPointerY = casaState.pointerY;
-    }
-    
-    // Inflar la casa
-    inflateBalloon(casaState.pointerX, casaState.pointerY);
-}
-
-function handleMouseUp(e) {
-    casaState.isPointerActive = false;
-    casaState.lastPointerX = null;
-    casaState.lastPointerY = null;
-}
-
-function handleMouseWheel(e) {
-    e.preventDefault();
-    
-    // Dirección de la rueda del ratón
-    const delta = Math.sign(e.deltaY);
-    
-    // Inflar o desinflar según dirección
-    casaState.inflation += delta * -0.1 * casaState.inflateSensitivity;
-    
-    // Limitar valores
-    casaState.inflation = Math.max(0, Math.min(casaState.inflateTreshold, casaState.inflation));
-    
-    // Iniciar efecto de rebote
-    triggerBounceEffect();
-}
-
-// Función para añadir una onda de presión
-function addPressureWave(x, y) {
-    casaState.pressureWaves.push({
-        x: x,
-        y: y,
-        baseSize: 5 + Math.random() * 5,
-        startTime: Date.now()
-    });
-}
-
-// Función para activar el efecto de rebote
-function triggerBounceEffect() {
-    casaState.isBouncingActive = true;
-    casaState.bounceIntensity = 3 + casaState.inflation * 2;
-    casaState.bounceFrequency = 0.1 + Math.random() * 0.1;
-    casaState.lastBounceTime = Date.now();
-}
-
-// Función para inflar la casa según la posición del cursor/toque
-function inflateBalloon(x, y) {
-    // Calcular distancia al centro de la casa
-    const dx = x - casaState.centerX;
-    const dy = y - casaState.centerY;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    
-    // Inflar más cuando el toque está cerca del centro
-    const maxInflateDistance = 150;
-    if (dist < maxInflateDistance) {
-        // Factor de inflación inversamente proporcional a la distancia
-        const factor = 1 - dist / maxInflateDistance;
-        casaState.inflation += casaState.inflateSpeed * factor * casaState.inflateSensitivity;
-        
-        // Limitar el valor máximo
-        casaState.inflation = Math.min(casaState.inflation, casaState.inflateTreshold);
-    }
-}
-
-// Función para explotar la casa
-function burstHouse() {
-    // Solo explotar si la inflación supera el umbral y puede explotar
-    if (casaState.inflation >= casaState.inflateTreshold && casaState.canBurst) {
-        // Reproducir sonido si está disponible
-        if (popSound && popSound.readyState >= 2) {
-            popSound.currentTime = 0;
-            popSound.play().catch(e => console.log("Error reproduciendo sonido:", e));
-        }
-        
-        // Efecto visual de explosión
-        createExplosionEffect();
-        
-        // Reiniciar casa
-        casaState.inflation = 0;
-        casaState.exploded = true;
-        
-        // Reconstruir la casa después de un tiempo
-        setTimeout(() => {
-            initHouse();
-            casaState.exploded = false;
-        }, 1000);
-    }
-}
-
-// Efecto visual de explosión
-function createExplosionEffect() {
-    // Crear partículas
-    const particleCount = casaState.isMobile ? 30 : 50;
-    casaState.particles = [];
-    
-    for (let i = 0; i < particleCount; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 2 + Math.random() * 4;
-        
-        casaState.particles.push({
-            x: casaState.centerX,
-            y: casaState.centerY,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            size: 3 + Math.random() * 5,
-            color: `hsl(${210 + Math.random() * 40}, 80%, 70%)`,
-            life: 1.0
-        });
-    }
-    
-    // Iniciar animación de explosión
-    if (!casaState.explosionInterval) {
-        casaState.explosionInterval = setInterval(animateExplosion, 16);
-    }
-}
-
-// Animar explosión
-function animateExplosion() {
-    if (!casaState.exploded || casaState.particles.length === 0) {
-        clearInterval(casaState.explosionInterval);
-        casaState.explosionInterval = null;
-        return;
-    }
-    
-    // Limpiar canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Actualizar y dibujar partículas
-    for (let i = casaState.particles.length - 1; i >= 0; i--) {
-        const p = casaState.particles[i];
-        
-        // Actualizar posición
-        p.x += p.vx;
-        p.y += p.vy;
-        
-        // Aplicar gravedad
-        p.vy += 0.1;
-        
-        // Reducir vida
-        p.life -= 0.02;
-        
-        // Eliminar partículas muertas
-        if (p.life <= 0) {
-            casaState.particles.splice(i, 1);
-            continue;
-        }
-        
-        // Dibujar partícula
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.life;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    
-    ctx.globalAlpha = 1;
-}
-
-// Función para dibujar los detalles de la casa
-function drawHouseDetails() {
-    // Solo dibujar detalles cuando la inflación es baja
-    if (casaState.inflation > casaState.inflateTreshold * 0.5) return;
-    
-    ctx.save();
-    
-    // Calcular posiciones ajustadas según inflación
-    const inflationFactor = casaState.inflation / casaState.inflateTreshold;
-    const distortionFactor = 1 + inflationFactor * 0.5;
-    
-    // Dibujar puerta
-    const doorWidth = 20 * distortionFactor;
-    const doorHeight = 40 * distortionFactor;
-    const doorX = casaState.centerX - doorWidth / 2;
-    const doorY = casaState.centerY + 20 * distortionFactor;
-    
-    // Aplicar distorsión a la puerta
-    ctx.fillStyle = 'rgba(80, 100, 140, 0.7)';
-    ctx.beginPath();
-    ctx.ellipse(
-        doorX + doorWidth / 2,
-        doorY + doorHeight / 2,
-        doorWidth / 2,
-        doorHeight / 2,
-        0, 0, Math.PI * 2
-    );
-    ctx.fill();
-    
-    // Dibujar ventanas si la inflación no es muy alta
-    if (casaState.inflation < casaState.inflateTreshold * 0.3) {
-        // Ventana izquierda
-        const windowSize = 15 * distortionFactor;
-        const windowX1 = casaState.centerX - 40 * distortionFactor;
-        const windowY = casaState.centerY - 10 * distortionFactor;
-        
-        ctx.fillStyle = 'rgba(200, 230, 255, 0.7)';
-        ctx.beginPath();
-        ctx.ellipse(
-            windowX1 + windowSize / 2,
-            windowY + windowSize / 2,
-            windowSize / 2,
-            windowSize / 2,
-            0, 0, Math.PI * 2
-        );
-        ctx.fill();
-        
-        // Ventana derecha
-        const windowX2 = casaState.centerX + 40 * distortionFactor;
-        
-        ctx.beginPath();
-        ctx.ellipse(
-            windowX2 - windowSize / 2,
-            windowY + windowSize / 2,
-            windowSize / 2,
-            windowSize / 2,
-            0, 0, Math.PI * 2
-        );
-        ctx.fill();
-    }
-    
-    ctx.restore();
-}
-
-// Inicializar o reiniciar las propiedades del estado de la casa
-function initHouseState() {
-    // Crear objeto de estado si no existe
-    if (!window.casaState) {
-        window.casaState = {};
-    }
-    
-    // Estado de la casa
     casaState.inflation = 0;
-    casaState.exploded = false;
-    casaState.baseSize = 100;
-    casaState.currentSize = casaState.baseSize;
-    casaState.centerX = canvas.width / 2;
-    casaState.centerY = canvas.height / 2;
-    casaState.puntos = [];
-    casaState.originalPuntos = [];
-    
-    // Configuración de inflado
-    casaState.inflateTreshold = casaState.isMobile ? 2.5 : 3.0;
-    casaState.inflateSensitivity = casaState.isMobile ? 2.5 : 1.0;
-    casaState.inflateSpeed = casaState.isMobile ? 0.35 : 0.08;
-    casaState.frictionFactor = casaState.isMobile ? 0.98 : 0.95;
-    
-    // Estado del puntero
-    casaState.isPointerActive = false;
-    casaState.pointerX = null;
-    casaState.pointerY = null;
-    casaState.lastPointerX = null;
-    casaState.lastPointerY = null;
-    casaState.lastMouseMoveTime = 0;
-    casaState.lastTouchMoveTime = 0;
-    casaState.touchResponseDelay = casaState.isMobile ? 10 : 16;
-    casaState.touchEffectSize = casaState.isMobile ? 30 : 20;
-    
-    // Estado de rebote
-    casaState.isBouncingActive = false;
+    casaState.opacidad = 1;
+    casaState.brillo = 0;
+    casaState.rota = false;
+    casaState.fragments = [];
+    casaState.fragmentsSnapped = 0;
+    casaState.reconstruccionIniciada = false;
     casaState.bounceIntensity = 0;
-    casaState.bounceFrequency = 0.1;
-    casaState.bouncePhase = 0;
-    casaState.lastBounceTime = Date.now();
-    
-    // Efectos visuales
-    casaState.pressureWaves = [];
-    casaState.particles = [];
-    casaState.explosionInterval = null;
-    casaState.vertexCount = casaState.isMobile ? 15 : 20;
-    
-    // Estado de reventado
-    casaState.canBurst = true;
-}
+    casaState.isBouncingActive = false;
+  }
 
-// Inicializar o reiniciar la casa
-function initHouse() {
-    // Inicializar estado
-    initHouseState();
-    
-    // Crear puntos originales de la casa
-    casaState.originalPuntos = createHouseShape(
-        casaState.centerX, 
-        casaState.centerY, 
-        casaState.baseSize
-    );
-    
-    // Copiar puntos para manipulación
-    casaState.puntos = JSON.parse(JSON.stringify(casaState.originalPuntos));
-}
-
-// Configurar el canvas
-function setupCanvas() {
-    canvas = document.getElementById('casaCanvas');
-    ctx = canvas.getContext('2d');
-    
-    // Ajustar tamaño del canvas al tamaño de la ventana
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        
-        // Actualizar posición central
-        if (casaState) {
-            casaState.centerX = canvas.width / 2;
-            casaState.centerY = canvas.height / 2;
-            
-            // Reiniciar casa si ya estaba inicializada
-            if (casaState.originalPuntos && casaState.originalPuntos.length > 0) {
-                initHouse();
-            }
-        }
+  function inflarCasa() {
+    const centerX = canvas.width / (2 * casaState.devicePixelRatio);
+    const centerY = canvas.height / (2 * casaState.devicePixelRatio);
+    for (let i = 0; i < casaState.puntos.length; i++) {
+      const p = casaState.puntos[i];
+      // Factor aumentado para inflar mucho más
+      p.x = p.origX + (p.origX - centerX) * casaState.inflation * 0.5;
+      p.y = p.origY + (p.origY - centerY) * casaState.inflation * 0.5;
     }
-    
-    // Configurar evento de redimensionamiento
-    window.addEventListener('resize', resizeCanvas);
-    
-    // Configurar tamaño inicial
-    resizeCanvas();
-    
-    // Configurar eventos táctiles y de ratón
-    enhancedTouchEvents();
-}
+  }
 
-// Mejorar manejo de eventos al iniciar
-function enhancedInit() {
-    // Detectar si es dispositivo móvil
-    casaState.isMobile = /Android|webOS|iPhone|iPad|iP
-// Crear la forma inicial de la casa (continuación del código)
-function createHouseShape(centerX, centerY, baseSize) {
-    const puntos = [];
-    const vertexCount = casaState.vertexCount;
-    
-    // Crear puntos en forma de casa con algo de aleatoriedad para hacerlo más orgánico
-    for (let i = 0; i < vertexCount; i++) {
-        const angle = (i / vertexCount) * Math.PI * 2;
-        
-        // Ajustar el radio para crear forma de casa en lugar de círculo perfecto
-        let radio = baseSize;
-        
-        // Modificar para forma de casa
-        if (angle > Math.PI * 1.1 && angle < Math.PI * 1.9) {
-            // Base de la casa (más ancha)
-            radio *= 1.2;
-        } else if (angle > Math.PI * 0.2 && angle < Math.PI * 0.8) {
-            // Techo de la casa (más puntiagudo)
-            radio *= 0.8 + Math.abs(Math.cos(angle)) * 0.4;
-        }
-        
-        // Añadir ligera variación para que no sea perfectamente regular
-        radio += (Math.random() - 0.5) * (baseSize * 0.1);
-        
-        // Calcular posición
-        const x = centerX + Math.cos(angle) * radio;
-        const y = centerY + Math.sin(angle) * radio;
-        
-        puntos.push({
-            x: x,
-            y: y,
-            originalX: x,
-            originalY: y,
-            angle: angle,
-            radio: radio
-        });
-    }
-    
-    return puntos;
-}
+  function drawGrid(context, points, centerX, centerY, scale = 1) {
+    context.save();
 
-// Aplicar efecto de inflación a los puntos de la casa
-function applyInflationEffect(points, centerX, centerY) {
-    // Factor de inflación para ajustar la deformación
-    const inflationFactor = Math.min(1.0, casaState.inflation / casaState.inflateTreshold);
-    
-    // Factor para convertirse gradualmente en círculo al inflarse
-    const morphToCircleFactor = Math.pow(inflationFactor, 1.5);
-    
-    // Actualizar cada punto según la inflación
-    for (let i = 0; i < points.length; i++) {
-        const point = points[i];
-        const originalPoint = casaState.originalPuntos[i];
-        
-        // Distancia desde el centro original
-        const originalDx = originalPoint.originalX - centerX;
-        const originalDy = originalPoint.originalY - centerY;
-        const originalDist = Math.sqrt(originalDx * originalDx + originalDy * originalDy);
-        
-        // Normalizar dirección
-        const normalizedDx = originalDx / originalDist;
-        const normalizedDy = originalDy / originalDist;
-        
-        // Calcular nueva distancia con inflación
-        const inflationMultiplier = 1 + (casaState.inflation * 0.15);
-        const newDist = originalDist * inflationMultiplier;
-        
-        // Interpolar entre forma original y círculo según nivel de inflación
-        const circleRadius = casaState.baseSize * (1 + inflationFactor * 0.5);
-        const morphedDist = originalDist * (1 - morphToCircleFactor) + circleRadius * morphToCircleFactor;
-        
-        // Aplicar distorsión según la dirección
-        // El efecto "globo de agua" es más pronunciado en la parte inferior
-        let distortionFactor = 1.0;
-        const angle = Math.atan2(originalDy, originalDx);
-        
-        // Más expansión en la parte inferior para simular efecto de gravedad del agua
-        if (angle > 0 && angle < Math.PI) {
-            distortionFactor += inflationFactor * 0.3 * Math.sin(angle);
-        }
-        
-        // Calcular posición final aplicando todos los efectos
-        const finalDist = morphedDist * distortionFactor;
-        
-        // Actualizar posición del punto
-        point.x = centerX + normalizedDx * finalDist * casaState.currentSize / casaState.baseSize;
-        point.y = centerY + normalizedDy * finalDist * casaState.currentSize / casaState.baseSize;
-    }
-}
-
-// Dibujar cuadrícula para simular el tejido tensado
-function drawGrid(ctx, points, centerX, centerY) {
-    ctx.save();
-    
-    const gridSize = 10;
-    const gridColor = 'rgba(100, 150, 200, 0.2)';
-    const gridStrokeWidth = 0.5;
-    
-    // Disminuir la opacidad con la inflación
-    const opacidad = Math.max(0.05, 0.25 - casaState.inflation * 0.05);
-    
-    ctx.strokeStyle = `rgba(100, 150, 200, ${opacidad})`;
-    ctx.lineWidth = gridStrokeWidth;
-    
-    // Cálculo del área para la cuadrícula
-    const minX = Math.min(...points.map(p => p.x)) - 10;
-    const maxX = Math.max(...points.map(p => p.x)) + 10;
-    const minY = Math.min(...points.map(p => p.y)) - 10;
-    const maxY = Math.max(...points.map(p => p.y)) + 10;
-    
-    // Dibujar líneas horizontales
-    for (let y = minY; y <= maxY; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(minX, y);
-        ctx.lineTo(maxX, y);
-        ctx.stroke();
-    }
-    
-    // Dibujar líneas verticales
-    for (let x = minX; x <= maxX; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, minY);
-        ctx.lineTo(x, maxY);
-        ctx.stroke();
-    }
-    
-    ctx.restore();
-}
-
-// Dibujar costuras del globo para dar efecto de tela tensada
-function drawStitches(ctx, points, centerX, centerY) {
-    ctx.save();
-    
-    // Reducir opacidad con la inflación
-    const opacidad = Math.max(0.1, 0.4 - casaState.inflation * 0.1);
-    ctx.strokeStyle = `rgba(80, 100, 140, ${opacidad})`;
-    ctx.lineWidth = 1;
-    
-    // Dibujar líneas desde el centro a cada punto para simular tensión
-    const inflationFactor = casaState.inflation / casaState.inflateTreshold;
-    
-    // Solo mostrar costuras cuando la inflación es baja/media
-    if (inflationFactor < 0.7) {
-        // Determinar número de costuras basado en inflación
-        const numStitches = Math.max(6, Math.round(12 * (1 - inflationFactor)));
-        const step = Math.floor(points.length / numStitches);
-        
-        for (let i = 0; i < points.length; i += step) {
-            const point = points[i];
-            
-            // Dibujar línea desde el centro hasta el borde con un ligero arco
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            
-            // Punto medio para el arco
-            const midX = (centerX + point.x) / 2;
-            const midY = (centerY + point.y) / 2;
-            
-            // Deformación del punto medio para crear arco
-            const perpX = -(point.y - centerY) * 0.2 * (1 - inflationFactor);
-            const perpY = (point.x - centerX) * 0.2 * (1 - inflationFactor);
-            
-            ctx.quadraticCurveTo(midX + perpX, midY + perpY, point.x, point.y);
-            ctx.stroke();
-        }
-    }
-    
-    ctx.restore();
-}
-
-// Cargar sonido para evento de reventado
-function loadPopSound() {
-    // Crear elemento de audio para el sonido de pop
-    window.popSound = new Audio();
-    popSound.src = 'https://assets.codepen.io/path/to/pop-sound.mp3'; // Reemplazar con URL real del sonido
-    popSound.preload = 'auto';
-    
-    // Fallback en caso de que el sonido no se pueda cargar
-    popSound.addEventListener('error', function() {
-        console.log("Error cargando sonido de pop");
+    // Clip para limitar cuadrícula dentro de la casa
+    context.beginPath();
+    points.forEach((p, i) => {
+      if (i === 0) context.moveTo(p.x, p.y);
+      else context.lineTo(p.x, p.y);
     });
-}
+    context.closePath();
+    context.clip();
 
-// Inicialización principal
-function initCasaInteractiva() {
-    // Configurar el canvas
-    setupCanvas();
-    
-    // Detectar si es dispositivo móvil
-    casaState.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // Inicializar casa
-    initHouse();
-    
-    // Actualizar funciones de dibujo
-    updateDrawingFunctions();
-    
-    // Mejorar sensibilidad táctil
-    enhanceTouchResponse();
-    
-    // Cargar sonido
-    loadPopSound();
-    
-    // Iniciar la animación
-    casaState.drawHouse();
-}
+    const distortion = 1 + casaState.inflation * 0.8;
+    context.strokeStyle = `rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2})`;
+    context.lineWidth = 0.5;
 
-// Iniciar cuando la ventana esté lista
-window.addEventListener('load', initCasaInteractiva);
+    const gridSize = 10 * scale;
+    const gridRange = 150 * scale;
 
-// Prevenir comportamiento de scroll en dispositivos táctiles
-document.addEventListener('touchmove', function(e) {
-    if (e.target === canvas) {
-        e.preventDefault();
+    let bounceEffect = 0;
+    if (casaState.isBouncingActive) {
+      bounceEffect = Math.sin(casaState.bouncePhase) * casaState.bounceIntensity;
     }
-}, { passive: false });
 
-// Función para mostrar indicador de inflación (útil para depuración)
-function showInflationIndicator() {
-    const indicatorContainer = document.createElement('div');
-    indicatorContainer.style.position = 'fixed';
-    indicatorContainer.style.bottom = '10px';
-    indicatorContainer.style.left = '10px';
-    indicatorContainer.style.background = 'rgba(0,0,0,0.5)';
-    indicatorContainer.style.color = 'white';
-    indicatorContainer.style.padding = '5px 10px';
-    indicatorContainer.style.borderRadius = '5px';
-    indicatorContainer.style.fontFamily = 'monospace';
-    indicatorContainer.id = 'inflation-indicator';
-    document.body.appendChild(indicatorContainer);
-    
-    // Actualizar en cada frame
-    function updateIndicator() {
-        if (casaState) {
-            indicatorContainer.textContent = `Inflación: ${casaState.inflation.toFixed(2)} / ${casaState.inflateTreshold.toFixed(2)}`;
-        }
-        requestAnimationFrame(updateIndicator);
+    // Líneas horizontales
+    for (let i = -gridRange; i <= gridRange; i += gridSize) {
+      context.beginPath();
+      for (let x = -gridRange; x <= gridRange; x += 5) {
+        const normalizedX = x / gridRange;
+        const normalizedY = i / gridRange;
+        const distToCenter = Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+        const distortionFactor = Math.max(0, 1 - distToCenter) * casaState.inflation;
+        const xPos = centerX + x;
+        const amplitude = casaState.inflation * 15 * Math.sin(Math.PI * normalizedY);
+        const yPos = centerY + i + amplitude * distortion + bounceEffect;
+        if (x === -gridRange) context.moveTo(xPos, yPos);
+        else context.lineTo(xPos, yPos);
+      }
+      context.stroke();
     }
-    
-    updateIndicator();
-}
 
-// Función para mostrar FPS (útil para optimización en móviles)
-function showFPS() {
-    const fpsContainer = document.createElement('div');
-    fpsContainer.style.position = 'fixed';
-    fpsContainer.style.top = '10px';
-    fpsContainer.style.right = '10px';
-    fpsContainer.style.background = 'rgba(0,0,0,0.5)';
-    fpsContainer.style.color = 'white';
-    fpsContainer.style.padding = '5px 10px';
-    fpsContainer.style.borderRadius = '5px';
-    fpsContainer.style.fontFamily = 'monospace';
-    fpsContainer.id = 'fps-indicator';
-    document.body.appendChild(fpsContainer);
-    
-    let lastFrameTime = performance.now();
-    let frameCount = 0;
-    let fps = 0;
-    
-    function updateFPS() {
-        frameCount++;
-        const now = performance.now();
-        const delta = now - lastFrameTime;
-        
-        if (delta >= 1000) {
-            fps = Math.round((frameCount * 1000) / delta);
-            frameCount = 0;
-            lastFrameTime = now;
-            fpsContainer.textContent = `FPS: ${fps}`;
-        }
-        
-        requestAnimationFrame(updateFPS);
+    // Líneas verticales
+    for (let i = -gridRange; i <= gridRange; i += gridSize) {
+      context.beginPath();
+      for (let y = -gridRange; y <= gridRange; y += 5) {
+        const normalizedX = i / gridRange;
+        const normalizedY = y / gridRange;
+        const distToCenter = Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+        const distortionFactor = Math.max(0, 1 - distToCenter) * casaState.inflation;
+        const yPos = centerY + y;
+        const amplitude = casaState.inflation * 15 * Math.sin(Math.PI * normalizedX);
+        const xPos = centerX + i + amplitude * distortionFactor + bounceEffect;
+        if (y === -gridRange) context.moveTo(xPos, yPos);
+        else context.lineTo(xPos, yPos);
+      }
+      context.stroke();
     }
-    
-    updateFPS();
-}
 
-// Desactivar las siguientes líneas en producción:
-// showInflationIndicator();
-// showFPS();
+    context.restore();
+  }
 
-// Función opcional para añadir controles de depuración
-function addDebugControls() {
-    const controlsContainer = document.createElement('div');
-    controlsContainer.style.position = 'fixed';
-    controlsContainer.style.bottom = '10px';
-    controlsContainer.style.right = '10px';
-    controlsContainer.style.background = 'rgba(0,0,0,0.7)';
-    controlsContainer.style.color = 'white';
-    controlsContainer.style.padding = '10px';
-    controlsContainer.style.borderRadius = '5px';
-    controlsContainer.style.display = 'flex';
-    controlsContainer.style.flexDirection = 'column';
-    controlsContainer.style.gap = '10px';
-    
-    // Botón para explotar manualmente
-    const burstButton = document.createElement('button');
-    burstButton.textContent = 'Explotar';
-    burstButton.onclick = () => {
-        casaState.inflation = casaState.inflateTreshold;
-        burstHouse();
-    };
-    
-    // Botón para reiniciar
-    const resetButton = document.createElement('button');
-    resetButton.textContent = 'Reiniciar';
-    resetButton.onclick = () => {
-        initHouse();
-    };
-    
-    // Control deslizante para la sensibilidad
-    const sensitivityLabel = document.createElement('label');
-    sensitivityLabel.textContent = 'Sensibilidad: ';
-    const sensitivitySlider = document.createElement('input');
-    sensitivitySlider.type = 'range';
-    sensitivitySlider.min = '0.5';
-    sensitivitySlider.max = '3';
-    sensitivitySlider.step = '0.1';
-    sensitivitySlider.value = casaState.inflateSensitivity;
-    sensitivitySlider.oninput = () => {
-        casaState.inflateSensitivity = parseFloat(sensitivitySlider.value);
-    };
-    
-    // Agregar elementos al contenedor
-    sensitivityLabel.appendChild(sensitivitySlider);
-    controlsContainer.appendChild(burstButton);
-    controlsContainer.appendChild(resetButton);
-    controlsContainer.appendChild(sensitivityLabel);
-    
-    document.body.appendChild(controlsContainer);
-}
-
-// Desactivar en producción:
-// addDebugControls();
-
-// Optimización para dispositivos móviles
-function optimizeForMobile() {
-    if (casaState.isMobile) {
-        // Reducir número de partículas y efectos para mejor rendimiento
-        casaState.vertexCount = 15; // Menos vértices
-        
-        // Implementar detección de gestos para mejor interacción táctil
-        implementTouchGestures();
-        
-        // Reducir calidad de algunos efectos visuales para mantener FPS
-        reduceVisualEffects();
+  function drawStitches(context, points, isFragment = false) {
+    context.save();
+    if (isFragment) {
+      context.lineWidth = 1.5;
+      context.strokeStyle = casaState.bordeColor;
+      context.beginPath();
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const numPuntos = Math.max(3, Math.floor(dist / 5));
+        for (let j = 0; j < numPuntos; j++) {
+          const t1 = j / numPuntos;
+          const t2 = (j + 0.5) / numPuntos;
+          const x1 = p1.x + (p2.x - p1.x) * t1;
+          const y1 = p1.y + (p2.y - p1.y) * t1;
+          const x2 = p1.x + (p2.x - p1.x) * t2;
+          const y2 = p1.y + (p2.y - p1.y) * t2;
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len > 0) {
+            const perpX = -dy / len * 2;
+            const perpY = dx / len * 2;
+            const dir = j % 2 === 0 ? 1 : -1;
+            context.moveTo(x1, y1);
+            context.lineTo(x2 + perpX * dir, y2 + perpY * dir);
+          }
+        }
+      }
+      context.stroke();
+    } else {
+      for (let i = 0; i < casaState.puntosCostra.length; i++) {
+        const punto = casaState.puntosCostra[i];
+        const size = punto.size * (1 + casaState.inflation * 0.2);
+        context.lineWidth = 1.5;
+        context.strokeStyle = casaState.bordeColor;
+        context.beginPath();
+        context.moveTo(punto.x - size, punto.y - size);
+        context.lineTo(punto.x + size, punto.y + size);
+        context.stroke();
+        context.beginPath();
+        context.moveTo(punto.x + size, punto.y - size);
+        context.lineTo(punto.x - size, punto.y + size);
+        context.stroke();
+      }
     }
-}
+    context.restore();
+  }
 
-// Implementar gestos táctiles adicionales
-function implementTouchGestures() {
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let lastTouchTime = 0;
-    
-    // Detección de doble toque para reventar inmediatamente
-    canvas.addEventListener('touchstart', function(e) {
-        const now = Date.now();
-        const timeDiff = now - lastTouchTime;
-        
-        if (timeDiff < 300) { // Doble toque detectado
-            // Inflar rápidamente hasta reventar
-            casaState.inflation = casaState.inflateTreshold * 0.9;
-            triggerBounceEffect();
-            casaState.bounceIntensity *= 2;
-        }
-        
-        lastTouchTime = now;
-        
-        // Guardar posición inicial para gestos
-        if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-        }
-    });
-    
-    // Detectar gesto de deslizar para inflar más rápido
-    canvas.addEventListener('touchmove', function(e) {
-        if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            const deltaX = touch.clientX - touchStartX;
-            const deltaY = touch.clientY - touchStartY;
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            // Si el deslizamiento es largo, añadir inflación extra
-            if (distance > 50) {
-                const extraInflation = distance * 0.005;
-                casaState.inflation += extraInflation;
-                
-                // Actualizar posición inicial para evitar inflado continuo
-                touchStartX = touch.clientX;
-                touchStartY = touch.clientY;
-                
-                // Activar efecto rebote más intenso
-                if (!casaState.isBouncingActive) {
-                    triggerBounceEffect();
-                } else {
-                    casaState.bounceIntensity = Math.min(10, casaState.bounceIntensity + 1);
-                }
-            }
-        }
-    });
-}
-
-// Reducir efectos visuales para mejor rendimiento en móviles
-function reduceVisualEffects() {
-    // Limitar número máximo de ondas de presión
-    const originalAddPressureWave = addPressureWave;
-    addPressureWave = function(x, y) {
-        if (casaState.pressureWaves.length < 5) {
-            originalAddPressureWave(x, y);
-        }
-    };
-    
-    // Reducir número de partículas en explosión
-    casaState.particleCount = 20; // Menos partículas
-}
-
-// Función para mejorar el tiempo de inflado en móviles
-function enhanceInflationSpeed() {
-    // Acelerar inflado al mantener presionado
-    let pressStartTime = 0;
-    let isLongPress = false;
-    let longPressInterval = null;
-    
-    // Para eventos táctiles
-    canvas.addEventListener('touchstart', function(e) {
-        pressStartTime = Date.now();
-        isLongPress = false;
-        
-        // Configurar temporizador para detectar presión larga
-        clearInterval(longPressInterval);
-        longPressInterval = setInterval(function() {
-            const pressDuration = Date.now() - pressStartTime;
-            
-            if (pressDuration > 300) { // Más de 300ms es presión larga
-                isLongPress = true;
-                
-                // Aumentar inflación más rápido durante presión larga
-                if (casaState.isPointerActive) {
-                    casaState.inflation += 0.1;
-                    casaState.bounceIntensity = Math.min(5, casaState.bounceIntensity + 0.2);
-                    
-                    // Añadir efecto visual de inflado rápido
-                    if (Math.random() < 0.3) {
-                        addPressureWave(casaState.pointerX, casaState.pointerY);
-                    }
-                }
-            }
-        }, 100);
-    });
-    
-    // Limpiar temporizador al soltar
-    canvas.addEventListener('touchend', function() {
-        clearInterval(longPressInterval);
-    });
-    
-    // Mismo comportamiento para ratón
-    canvas.addEventListener('mousedown', function() {
-        pressStartTime = Date.now();
-        isLongPress = false;
-        
-        clearInterval(longPressInterval);
-        longPressInterval = setInterval(function() {
-            const pressDuration = Date.now() - pressStartTime;
-            
-            if (pressDuration > 300) {
-                isLongPress = true;
-                
-                if (casaState.isPointerActive) {
-                    casaState.inflation += 0.05;
-                    casaState.bounceIntensity = Math.min(5, casaState.bounceIntensity + 0.1);
-                    
-                    if (Math.random() < 0.2) {
-                        addPressureWave(casaState.pointerX, casaState.pointerY);
-                    }
-                }
-            }
-        }, 100);
-    });
-    
-    canvas.addEventListener('mouseup', function() {
-        clearInterval(longPressInterval);
-    });
-}
-
-// Mejorar el efecto de distorsión para que sea más parecido a un globo de agua
-function enhanceWaterBalloonEffect() {
-    // Guardar la función original
-    const originalApplyInflationEffect = applyInflationEffect;
-    
-    // Reemplazar con versión mejorada
-    applyInflationEffect = function(points, centerX, centerY) {
-        // Llamar a la función original primero
-        originalApplyInflationEffect(points, centerX, centerY);
-        
-        // Aplicar efecto adicional de "gota de agua"
-        const inflationFactor = Math.min(1.0, casaState.inflation / casaState.inflateTreshold);
-        
-        if (inflationFactor > 0.3) {
-            // Añadir efecto de gravedad - parte inferior más pesada
-            for (let i = 0; i < points.length; i++) {
-                const point = points[i];
-                const angle = Math.atan2(point.y - centerY, point.x - centerX);
-                
-                // Aplicar más distorsión en la parte inferior
-                if (angle > 0 && angle < Math.PI) {
-                    // Calcular factor de estiramiento basado en ángulo
-                    // Máximo estiramiento en la parte inferior (PI/2)
-                    const stretchFactor = Math.sin(angle) * inflationFactor * 10;
-                    
-                    // Aplicar estiramiento vertical
-                    point.y += stretchFactor;
-                }
-            }
-        }
-    };
-}
-
-// Añadir sonidos adicionales para mejor feedback
-function enhanceSoundEffects() {
-    // Sonido de estiramiento/tensión
-    window.stretchSound = new Audio();
-    stretchSound.src = 'https://assets.codepen.io/path/to/stretch-sound.mp3'; // Reemplazar con URL real
-    stretchSound.preload = 'auto';
-    stretchSound.volume = 0.3;
-    
-    // Sonido de rebote
-    window.bounceSound = new Audio();
-    bounceSound.src = 'https://assets.codepen.io/path/to/bounce-sound.mp3'; // Reemplazar con URL real
-    bounceSound.preload = 'auto';
-    bounceSound.volume = 0.2;
-    
-    // Modificar función de rebote para incluir sonido
-    const originalTriggerBounceEffect = triggerBounceEffect;
-    triggerBounceEffect = function() {
-        originalTriggerBounceEffect();
-        
-        // Reproducir sonido de rebote si está disponible
-        if (bounceSound && bounceSound.readyState >= 2 && casaState.bounceIntensity > 1) {
-            bounceSound.currentTime = 0;
-            bounceSound.volume = Math.min(0.3, casaState.bounceIntensity * 0.05);
-            bounceSound.play().catch(e => console.log("Error reproduciendo sonido:", e));
-        }
-    };
-    
-    // Reproducir sonido de estiramiento cuando la inflación es alta
-    function playStretchSoundIfNeeded() {
-        if (stretchSound && stretchSound.readyState >= 2) {
-            if (casaState.inflation > casaState.inflateTreshold * 0.8 && !casaState.stretchSoundPlayed) {
-                stretchSound.currentTime = 0;
-                stretchSound.play().catch(e => console.log("Error reproduciendo sonido:", e));
-                casaState.stretchSoundPlayed = true;
-            } else if (casaState.inflation < casaState.inflateTreshold * 0.7) {
-                casaState.stretchSoundPlayed = false;
-            }
-        }
-        
-        requestAnimationFrame(playStretchSoundIfNeeded);
+  function checkTension() {
+    if (casaState.inflation > 0.3) {
+      const tension = casaState.inflation * 150;
+      if (tension > casaState.tensionMax) {
+        casaState.rota = true;
+        popSound.play();
+      }
     }
-    
-    playStretchSoundIfNeeded();
-}
+  }
 
-// Iniciar todas las mejoras adicionales
-function initAdditionalEnhancements() {
-    optimizeForMobile();
-    enhanceInflationSpeed();
-    enhanceWaterBalloonEffect();
-    // enhanceSoundEffects(); // Opcional: activar si se dispone de los sonidos
-}
+  function drawHouse() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!casaState.rota) {
+      inflarCasa();
+      drawGrid(ctx, casaState.puntos, canvas.width / (2 * casaState.devicePixelRatio), canvas.height / (2 * casaState.devicePixelRatio), 1);
+      // Dibuja la casa con bordes suaves
+      ctx.beginPath();
+      const pts = casaState.puntos;
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+        const midX = (pts[i].x + pts[i + 1].x) / 2;
+        const midY = (pts[i].y + pts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+      }
+      ctx.closePath();
+      const gradient = ctx.createRadialGradient(canvas.width / (2 * casaState.devicePixelRatio), canvas.height / (2 * casaState.devicePixelRatio), 50, canvas.width / (2 * casaState.devicePixelRatio), canvas.height / (2 * casaState.devicePixelRatio), 200);
+      gradient.addColorStop(0, `rgba(255,255,255,${0.6 + casaState.brillo * 0.4})`);
+      gradient.addColorStop(1, `rgba(180,180,220,0.8)`);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      ctx.strokeStyle = casaState.bordeColor;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      drawStitches(ctx, null, false);
+    } else {
+      // Aquí dibuja fragmentos si la casa está rota (puedes mantener tu código original)
+    }
+  }
 
-// Llamar a las mejoras después de la inicialización principal
-window.addEventListener('load', function() {
-    // Esperar un breve momento para que se inicialice todo primero
-    setTimeout(initAdditionalEnhancements, 100);
-});
+  function update() {
+    if (!casaState.rota) {
+      if (casaState.inflation < 1) {
+        casaState.inflation += 0.005; // Simulación de inflado progresivo
+      }
+      casaState.brillo = casaState.inflation;
+      checkTension();
+    }
+  }
+
+  function loop() {
+    update();
+    drawHouse();
+    requestAnimationFrame(loop);
+  }
+
+  // Inicialización
+  setupCanvas();
+  initHouse();
+  loop();
+
+  // Aquí puedes agregar la lógica para controlar inflation vía micrófono o eventos
+
+</script>
+</body>
+</html>

@@ -2280,3 +2280,582 @@ function setupCanvas() {
 function enhancedInit() {
     // Detectar si es dispositivo móvil
     casaState.isMobile = /Android|webOS|iPhone|iPad|iP
+// Crear la forma inicial de la casa (continuación del código)
+function createHouseShape(centerX, centerY, baseSize) {
+    const puntos = [];
+    const vertexCount = casaState.vertexCount;
+    
+    // Crear puntos en forma de casa con algo de aleatoriedad para hacerlo más orgánico
+    for (let i = 0; i < vertexCount; i++) {
+        const angle = (i / vertexCount) * Math.PI * 2;
+        
+        // Ajustar el radio para crear forma de casa en lugar de círculo perfecto
+        let radio = baseSize;
+        
+        // Modificar para forma de casa
+        if (angle > Math.PI * 1.1 && angle < Math.PI * 1.9) {
+            // Base de la casa (más ancha)
+            radio *= 1.2;
+        } else if (angle > Math.PI * 0.2 && angle < Math.PI * 0.8) {
+            // Techo de la casa (más puntiagudo)
+            radio *= 0.8 + Math.abs(Math.cos(angle)) * 0.4;
+        }
+        
+        // Añadir ligera variación para que no sea perfectamente regular
+        radio += (Math.random() - 0.5) * (baseSize * 0.1);
+        
+        // Calcular posición
+        const x = centerX + Math.cos(angle) * radio;
+        const y = centerY + Math.sin(angle) * radio;
+        
+        puntos.push({
+            x: x,
+            y: y,
+            originalX: x,
+            originalY: y,
+            angle: angle,
+            radio: radio
+        });
+    }
+    
+    return puntos;
+}
+
+// Aplicar efecto de inflación a los puntos de la casa
+function applyInflationEffect(points, centerX, centerY) {
+    // Factor de inflación para ajustar la deformación
+    const inflationFactor = Math.min(1.0, casaState.inflation / casaState.inflateTreshold);
+    
+    // Factor para convertirse gradualmente en círculo al inflarse
+    const morphToCircleFactor = Math.pow(inflationFactor, 1.5);
+    
+    // Actualizar cada punto según la inflación
+    for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        const originalPoint = casaState.originalPuntos[i];
+        
+        // Distancia desde el centro original
+        const originalDx = originalPoint.originalX - centerX;
+        const originalDy = originalPoint.originalY - centerY;
+        const originalDist = Math.sqrt(originalDx * originalDx + originalDy * originalDy);
+        
+        // Normalizar dirección
+        const normalizedDx = originalDx / originalDist;
+        const normalizedDy = originalDy / originalDist;
+        
+        // Calcular nueva distancia con inflación
+        const inflationMultiplier = 1 + (casaState.inflation * 0.15);
+        const newDist = originalDist * inflationMultiplier;
+        
+        // Interpolar entre forma original y círculo según nivel de inflación
+        const circleRadius = casaState.baseSize * (1 + inflationFactor * 0.5);
+        const morphedDist = originalDist * (1 - morphToCircleFactor) + circleRadius * morphToCircleFactor;
+        
+        // Aplicar distorsión según la dirección
+        // El efecto "globo de agua" es más pronunciado en la parte inferior
+        let distortionFactor = 1.0;
+        const angle = Math.atan2(originalDy, originalDx);
+        
+        // Más expansión en la parte inferior para simular efecto de gravedad del agua
+        if (angle > 0 && angle < Math.PI) {
+            distortionFactor += inflationFactor * 0.3 * Math.sin(angle);
+        }
+        
+        // Calcular posición final aplicando todos los efectos
+        const finalDist = morphedDist * distortionFactor;
+        
+        // Actualizar posición del punto
+        point.x = centerX + normalizedDx * finalDist * casaState.currentSize / casaState.baseSize;
+        point.y = centerY + normalizedDy * finalDist * casaState.currentSize / casaState.baseSize;
+    }
+}
+
+// Dibujar cuadrícula para simular el tejido tensado
+function drawGrid(ctx, points, centerX, centerY) {
+    ctx.save();
+    
+    const gridSize = 10;
+    const gridColor = 'rgba(100, 150, 200, 0.2)';
+    const gridStrokeWidth = 0.5;
+    
+    // Disminuir la opacidad con la inflación
+    const opacidad = Math.max(0.05, 0.25 - casaState.inflation * 0.05);
+    
+    ctx.strokeStyle = `rgba(100, 150, 200, ${opacidad})`;
+    ctx.lineWidth = gridStrokeWidth;
+    
+    // Cálculo del área para la cuadrícula
+    const minX = Math.min(...points.map(p => p.x)) - 10;
+    const maxX = Math.max(...points.map(p => p.x)) + 10;
+    const minY = Math.min(...points.map(p => p.y)) - 10;
+    const maxY = Math.max(...points.map(p => p.y)) + 10;
+    
+    // Dibujar líneas horizontales
+    for (let y = minY; y <= maxY; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(minX, y);
+        ctx.lineTo(maxX, y);
+        ctx.stroke();
+    }
+    
+    // Dibujar líneas verticales
+    for (let x = minX; x <= maxX; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, minY);
+        ctx.lineTo(x, maxY);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+// Dibujar costuras del globo para dar efecto de tela tensada
+function drawStitches(ctx, points, centerX, centerY) {
+    ctx.save();
+    
+    // Reducir opacidad con la inflación
+    const opacidad = Math.max(0.1, 0.4 - casaState.inflation * 0.1);
+    ctx.strokeStyle = `rgba(80, 100, 140, ${opacidad})`;
+    ctx.lineWidth = 1;
+    
+    // Dibujar líneas desde el centro a cada punto para simular tensión
+    const inflationFactor = casaState.inflation / casaState.inflateTreshold;
+    
+    // Solo mostrar costuras cuando la inflación es baja/media
+    if (inflationFactor < 0.7) {
+        // Determinar número de costuras basado en inflación
+        const numStitches = Math.max(6, Math.round(12 * (1 - inflationFactor)));
+        const step = Math.floor(points.length / numStitches);
+        
+        for (let i = 0; i < points.length; i += step) {
+            const point = points[i];
+            
+            // Dibujar línea desde el centro hasta el borde con un ligero arco
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            
+            // Punto medio para el arco
+            const midX = (centerX + point.x) / 2;
+            const midY = (centerY + point.y) / 2;
+            
+            // Deformación del punto medio para crear arco
+            const perpX = -(point.y - centerY) * 0.2 * (1 - inflationFactor);
+            const perpY = (point.x - centerX) * 0.2 * (1 - inflationFactor);
+            
+            ctx.quadraticCurveTo(midX + perpX, midY + perpY, point.x, point.y);
+            ctx.stroke();
+        }
+    }
+    
+    ctx.restore();
+}
+
+// Cargar sonido para evento de reventado
+function loadPopSound() {
+    // Crear elemento de audio para el sonido de pop
+    window.popSound = new Audio();
+    popSound.src = 'https://assets.codepen.io/path/to/pop-sound.mp3'; // Reemplazar con URL real del sonido
+    popSound.preload = 'auto';
+    
+    // Fallback en caso de que el sonido no se pueda cargar
+    popSound.addEventListener('error', function() {
+        console.log("Error cargando sonido de pop");
+    });
+}
+
+// Inicialización principal
+function initCasaInteractiva() {
+    // Configurar el canvas
+    setupCanvas();
+    
+    // Detectar si es dispositivo móvil
+    casaState.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // Inicializar casa
+    initHouse();
+    
+    // Actualizar funciones de dibujo
+    updateDrawingFunctions();
+    
+    // Mejorar sensibilidad táctil
+    enhanceTouchResponse();
+    
+    // Cargar sonido
+    loadPopSound();
+    
+    // Iniciar la animación
+    casaState.drawHouse();
+}
+
+// Iniciar cuando la ventana esté lista
+window.addEventListener('load', initCasaInteractiva);
+
+// Prevenir comportamiento de scroll en dispositivos táctiles
+document.addEventListener('touchmove', function(e) {
+    if (e.target === canvas) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+// Función para mostrar indicador de inflación (útil para depuración)
+function showInflationIndicator() {
+    const indicatorContainer = document.createElement('div');
+    indicatorContainer.style.position = 'fixed';
+    indicatorContainer.style.bottom = '10px';
+    indicatorContainer.style.left = '10px';
+    indicatorContainer.style.background = 'rgba(0,0,0,0.5)';
+    indicatorContainer.style.color = 'white';
+    indicatorContainer.style.padding = '5px 10px';
+    indicatorContainer.style.borderRadius = '5px';
+    indicatorContainer.style.fontFamily = 'monospace';
+    indicatorContainer.id = 'inflation-indicator';
+    document.body.appendChild(indicatorContainer);
+    
+    // Actualizar en cada frame
+    function updateIndicator() {
+        if (casaState) {
+            indicatorContainer.textContent = `Inflación: ${casaState.inflation.toFixed(2)} / ${casaState.inflateTreshold.toFixed(2)}`;
+        }
+        requestAnimationFrame(updateIndicator);
+    }
+    
+    updateIndicator();
+}
+
+// Función para mostrar FPS (útil para optimización en móviles)
+function showFPS() {
+    const fpsContainer = document.createElement('div');
+    fpsContainer.style.position = 'fixed';
+    fpsContainer.style.top = '10px';
+    fpsContainer.style.right = '10px';
+    fpsContainer.style.background = 'rgba(0,0,0,0.5)';
+    fpsContainer.style.color = 'white';
+    fpsContainer.style.padding = '5px 10px';
+    fpsContainer.style.borderRadius = '5px';
+    fpsContainer.style.fontFamily = 'monospace';
+    fpsContainer.id = 'fps-indicator';
+    document.body.appendChild(fpsContainer);
+    
+    let lastFrameTime = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+    
+    function updateFPS() {
+        frameCount++;
+        const now = performance.now();
+        const delta = now - lastFrameTime;
+        
+        if (delta >= 1000) {
+            fps = Math.round((frameCount * 1000) / delta);
+            frameCount = 0;
+            lastFrameTime = now;
+            fpsContainer.textContent = `FPS: ${fps}`;
+        }
+        
+        requestAnimationFrame(updateFPS);
+    }
+    
+    updateFPS();
+}
+
+// Desactivar las siguientes líneas en producción:
+// showInflationIndicator();
+// showFPS();
+
+// Función opcional para añadir controles de depuración
+function addDebugControls() {
+    const controlsContainer = document.createElement('div');
+    controlsContainer.style.position = 'fixed';
+    controlsContainer.style.bottom = '10px';
+    controlsContainer.style.right = '10px';
+    controlsContainer.style.background = 'rgba(0,0,0,0.7)';
+    controlsContainer.style.color = 'white';
+    controlsContainer.style.padding = '10px';
+    controlsContainer.style.borderRadius = '5px';
+    controlsContainer.style.display = 'flex';
+    controlsContainer.style.flexDirection = 'column';
+    controlsContainer.style.gap = '10px';
+    
+    // Botón para explotar manualmente
+    const burstButton = document.createElement('button');
+    burstButton.textContent = 'Explotar';
+    burstButton.onclick = () => {
+        casaState.inflation = casaState.inflateTreshold;
+        burstHouse();
+    };
+    
+    // Botón para reiniciar
+    const resetButton = document.createElement('button');
+    resetButton.textContent = 'Reiniciar';
+    resetButton.onclick = () => {
+        initHouse();
+    };
+    
+    // Control deslizante para la sensibilidad
+    const sensitivityLabel = document.createElement('label');
+    sensitivityLabel.textContent = 'Sensibilidad: ';
+    const sensitivitySlider = document.createElement('input');
+    sensitivitySlider.type = 'range';
+    sensitivitySlider.min = '0.5';
+    sensitivitySlider.max = '3';
+    sensitivitySlider.step = '0.1';
+    sensitivitySlider.value = casaState.inflateSensitivity;
+    sensitivitySlider.oninput = () => {
+        casaState.inflateSensitivity = parseFloat(sensitivitySlider.value);
+    };
+    
+    // Agregar elementos al contenedor
+    sensitivityLabel.appendChild(sensitivitySlider);
+    controlsContainer.appendChild(burstButton);
+    controlsContainer.appendChild(resetButton);
+    controlsContainer.appendChild(sensitivityLabel);
+    
+    document.body.appendChild(controlsContainer);
+}
+
+// Desactivar en producción:
+// addDebugControls();
+
+// Optimización para dispositivos móviles
+function optimizeForMobile() {
+    if (casaState.isMobile) {
+        // Reducir número de partículas y efectos para mejor rendimiento
+        casaState.vertexCount = 15; // Menos vértices
+        
+        // Implementar detección de gestos para mejor interacción táctil
+        implementTouchGestures();
+        
+        // Reducir calidad de algunos efectos visuales para mantener FPS
+        reduceVisualEffects();
+    }
+}
+
+// Implementar gestos táctiles adicionales
+function implementTouchGestures() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let lastTouchTime = 0;
+    
+    // Detección de doble toque para reventar inmediatamente
+    canvas.addEventListener('touchstart', function(e) {
+        const now = Date.now();
+        const timeDiff = now - lastTouchTime;
+        
+        if (timeDiff < 300) { // Doble toque detectado
+            // Inflar rápidamente hasta reventar
+            casaState.inflation = casaState.inflateTreshold * 0.9;
+            triggerBounceEffect();
+            casaState.bounceIntensity *= 2;
+        }
+        
+        lastTouchTime = now;
+        
+        // Guardar posición inicial para gestos
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+        }
+    });
+    
+    // Detectar gesto de deslizar para inflar más rápido
+    canvas.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Si el deslizamiento es largo, añadir inflación extra
+            if (distance > 50) {
+                const extraInflation = distance * 0.005;
+                casaState.inflation += extraInflation;
+                
+                // Actualizar posición inicial para evitar inflado continuo
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+                
+                // Activar efecto rebote más intenso
+                if (!casaState.isBouncingActive) {
+                    triggerBounceEffect();
+                } else {
+                    casaState.bounceIntensity = Math.min(10, casaState.bounceIntensity + 1);
+                }
+            }
+        }
+    });
+}
+
+// Reducir efectos visuales para mejor rendimiento en móviles
+function reduceVisualEffects() {
+    // Limitar número máximo de ondas de presión
+    const originalAddPressureWave = addPressureWave;
+    addPressureWave = function(x, y) {
+        if (casaState.pressureWaves.length < 5) {
+            originalAddPressureWave(x, y);
+        }
+    };
+    
+    // Reducir número de partículas en explosión
+    casaState.particleCount = 20; // Menos partículas
+}
+
+// Función para mejorar el tiempo de inflado en móviles
+function enhanceInflationSpeed() {
+    // Acelerar inflado al mantener presionado
+    let pressStartTime = 0;
+    let isLongPress = false;
+    let longPressInterval = null;
+    
+    // Para eventos táctiles
+    canvas.addEventListener('touchstart', function(e) {
+        pressStartTime = Date.now();
+        isLongPress = false;
+        
+        // Configurar temporizador para detectar presión larga
+        clearInterval(longPressInterval);
+        longPressInterval = setInterval(function() {
+            const pressDuration = Date.now() - pressStartTime;
+            
+            if (pressDuration > 300) { // Más de 300ms es presión larga
+                isLongPress = true;
+                
+                // Aumentar inflación más rápido durante presión larga
+                if (casaState.isPointerActive) {
+                    casaState.inflation += 0.1;
+                    casaState.bounceIntensity = Math.min(5, casaState.bounceIntensity + 0.2);
+                    
+                    // Añadir efecto visual de inflado rápido
+                    if (Math.random() < 0.3) {
+                        addPressureWave(casaState.pointerX, casaState.pointerY);
+                    }
+                }
+            }
+        }, 100);
+    });
+    
+    // Limpiar temporizador al soltar
+    canvas.addEventListener('touchend', function() {
+        clearInterval(longPressInterval);
+    });
+    
+    // Mismo comportamiento para ratón
+    canvas.addEventListener('mousedown', function() {
+        pressStartTime = Date.now();
+        isLongPress = false;
+        
+        clearInterval(longPressInterval);
+        longPressInterval = setInterval(function() {
+            const pressDuration = Date.now() - pressStartTime;
+            
+            if (pressDuration > 300) {
+                isLongPress = true;
+                
+                if (casaState.isPointerActive) {
+                    casaState.inflation += 0.05;
+                    casaState.bounceIntensity = Math.min(5, casaState.bounceIntensity + 0.1);
+                    
+                    if (Math.random() < 0.2) {
+                        addPressureWave(casaState.pointerX, casaState.pointerY);
+                    }
+                }
+            }
+        }, 100);
+    });
+    
+    canvas.addEventListener('mouseup', function() {
+        clearInterval(longPressInterval);
+    });
+}
+
+// Mejorar el efecto de distorsión para que sea más parecido a un globo de agua
+function enhanceWaterBalloonEffect() {
+    // Guardar la función original
+    const originalApplyInflationEffect = applyInflationEffect;
+    
+    // Reemplazar con versión mejorada
+    applyInflationEffect = function(points, centerX, centerY) {
+        // Llamar a la función original primero
+        originalApplyInflationEffect(points, centerX, centerY);
+        
+        // Aplicar efecto adicional de "gota de agua"
+        const inflationFactor = Math.min(1.0, casaState.inflation / casaState.inflateTreshold);
+        
+        if (inflationFactor > 0.3) {
+            // Añadir efecto de gravedad - parte inferior más pesada
+            for (let i = 0; i < points.length; i++) {
+                const point = points[i];
+                const angle = Math.atan2(point.y - centerY, point.x - centerX);
+                
+                // Aplicar más distorsión en la parte inferior
+                if (angle > 0 && angle < Math.PI) {
+                    // Calcular factor de estiramiento basado en ángulo
+                    // Máximo estiramiento en la parte inferior (PI/2)
+                    const stretchFactor = Math.sin(angle) * inflationFactor * 10;
+                    
+                    // Aplicar estiramiento vertical
+                    point.y += stretchFactor;
+                }
+            }
+        }
+    };
+}
+
+// Añadir sonidos adicionales para mejor feedback
+function enhanceSoundEffects() {
+    // Sonido de estiramiento/tensión
+    window.stretchSound = new Audio();
+    stretchSound.src = 'https://assets.codepen.io/path/to/stretch-sound.mp3'; // Reemplazar con URL real
+    stretchSound.preload = 'auto';
+    stretchSound.volume = 0.3;
+    
+    // Sonido de rebote
+    window.bounceSound = new Audio();
+    bounceSound.src = 'https://assets.codepen.io/path/to/bounce-sound.mp3'; // Reemplazar con URL real
+    bounceSound.preload = 'auto';
+    bounceSound.volume = 0.2;
+    
+    // Modificar función de rebote para incluir sonido
+    const originalTriggerBounceEffect = triggerBounceEffect;
+    triggerBounceEffect = function() {
+        originalTriggerBounceEffect();
+        
+        // Reproducir sonido de rebote si está disponible
+        if (bounceSound && bounceSound.readyState >= 2 && casaState.bounceIntensity > 1) {
+            bounceSound.currentTime = 0;
+            bounceSound.volume = Math.min(0.3, casaState.bounceIntensity * 0.05);
+            bounceSound.play().catch(e => console.log("Error reproduciendo sonido:", e));
+        }
+    };
+    
+    // Reproducir sonido de estiramiento cuando la inflación es alta
+    function playStretchSoundIfNeeded() {
+        if (stretchSound && stretchSound.readyState >= 2) {
+            if (casaState.inflation > casaState.inflateTreshold * 0.8 && !casaState.stretchSoundPlayed) {
+                stretchSound.currentTime = 0;
+                stretchSound.play().catch(e => console.log("Error reproduciendo sonido:", e));
+                casaState.stretchSoundPlayed = true;
+            } else if (casaState.inflation < casaState.inflateTreshold * 0.7) {
+                casaState.stretchSoundPlayed = false;
+            }
+        }
+        
+        requestAnimationFrame(playStretchSoundIfNeeded);
+    }
+    
+    playStretchSoundIfNeeded();
+}
+
+// Iniciar todas las mejoras adicionales
+function initAdditionalEnhancements() {
+    optimizeForMobile();
+    enhanceInflationSpeed();
+    enhanceWaterBalloonEffect();
+    // enhanceSoundEffects(); // Opcional: activar si se dispone de los sonidos
+}
+
+// Llamar a las mejoras después de la inicialización principal
+window.addEventListener('load', function() {
+    // Esperar un breve momento para que se inicialice todo primero
+    setTimeout(initAdditionalEnhancements, 100);
+});

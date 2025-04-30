@@ -181,7 +181,7 @@
         // Dibujar cuadrÃ­cula en la superficie para dar efecto de lÃ¡tex
         function drawGrid(context, points, centerX, centerY, scale = 1) {
             context.save();
-            context.strokeStyle = rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2});
+            context.strokeStyle = `rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2})`;
             context.lineWidth = 0.5;
             
             // Dibujar lÃ­neas horizontales y verticales
@@ -317,9 +317,9 @@
                     
                     // Efecto de brillo para lÃ¡tex
                     const gradientFill = ctx.createRadialGradient(0, 0, 5, 0, 0, 50);
-                    gradientFill.addColorStop(0, rgba(255, 255, 255, ${0.8 - fragment.transparency}));
-                    gradientFill.addColorStop(0.7, rgba(220, 220, 240, ${0.6 - fragment.transparency}));
-                    gradientFill.addColorStop(1, rgba(200, 200, 230, ${0.5 - fragment.transparency}));
+                    gradientFill.addColorStop(0, `rgba(255, 255, 255, ${0.8 - fragment.transparency})`);
+                    gradientFill.addColorStop(0.7, `rgba(220, 220, 240, ${0.6 - fragment.transparency})`);
+                    gradientFill.addColorStop(1, `rgba(200, 200, 230, ${0.5 - fragment.transparency})`);
                     ctx.fillStyle = gradientFill;
                     ctx.fill();
                     
@@ -417,9 +417,9 @@
                 
                 // Colores del degradado segÃºn nivel de inflado
                 const alpha = 0.9 - casaState.inflation * 0.2;
-                gradient.addColorStop(0, rgba(255, 255, 255, ${0.8 + casaState.brillo * 0.2}));
-                gradient.addColorStop(0.5, rgba(230, 230, 240, ${0.7 + casaState.brillo * 0.2}));
-                gradient.addColorStop(1, rgba(200, 200, 230, ${alpha}));
+                gradient.addColorStop(0, `rgba(255, 255, 255, ${0.8 + casaState.brillo * 0.2})`);
+                gradient.addColorStop(0.5, `rgba(230, 230, 240, ${0.7 + casaState.brillo * 0.2})`);
+                gradient.addColorStop(1, `rgba(200, 200, 230, ${alpha})`);
                 
                 ctx.fillStyle = gradient;
                 ctx.fill();
@@ -442,7 +442,7 @@
                     centerX - 30, centerY - 30, 5,
                     centerX - 30, centerY - 30, highlightRadius
                 );
-                highlightGradient.addColorStop(0, rgba(255, 255, 255, ${0.7 + casaState.brillo * 0.3}));
+                highlightGradient.addColorStop(0, `rgba(255, 255, 255, ${0.7 + casaState.brillo * 0.3})`);
                 highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 
                 ctx.fillStyle = highlightGradient;
@@ -460,7 +460,7 @@
                             casaState.cursorX, casaState.cursorY, 1,
                             casaState.cursorX, casaState.cursorY, pulseRadius * (1 + casaState.inflation)
                         );
-                        pulseGradient.addColorStop(0, rgba(255, 255, 255, ${0.6 * cursorEffect}));
+                        pulseGradient.addColorStop(0, `rgba(255, 255, 255, ${0.6 * cursorEffect})`);
                         pulseGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
                         
                         ctx.fillStyle = pulseGradient;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Casa Globo Interactiva</title>
+    <title>Casa Globo Interactiva Mejorada</title>
     <style>
         body {
             margin: 0;
@@ -63,19 +63,21 @@
             inflation: 0,       // Nivel de inflado (0-1)
             opacidad: 1,        // Opacidad de la tela (inversa a inflado)
             elasticidad: 0.05,  // Qué tan rápido regresa a su forma
-            tensionMax: 50,     // Tensión máxima antes de reventar - reducido para que reviente más fácil
+            tensionMax: 75,     // Tensión máxima antes de reventar - AUMENTADO para más resistencia
             brillo: 0,          // Nivel de brillo del látex
             bordeColor: '#8B4513', // Color café para el bordado
             cursorDistancia: 0, // Distancia del cursor a la casa
             cursorInteraccion: false, // Si el cursor está interactuando con la casa
-            inflationFactor: 1.5, // Factor de inflación por audio - AUMENTADO SIGNIFICATIVAMENTE
-            mouseInflationFactor: 0.005, // Factor de inflación por mouse/touch - REDUCIDO SIGNIFICATIVAMENTE
+            inflationFactor: 0.8, // Factor de inflación por audio - REDUCIDO para inflado más controlado
+            mouseInflationFactor: 0.001, // Factor de inflación por mouse/touch - MINIMIZADO
             cursorX: 0,
             cursorY: 0,
             lastInteractionTime: 0,
             interactionCount: 0, // Contador de interacciones para reventar por interacción excesiva
             audioVolume: 0,     // Volumen actual del audio para visualización
-            maxAudioAmplitude: 0 // Máxima amplitud de audio registrada
+            maxAudioAmplitude: 0, // Máxima amplitud de audio registrada
+            tensionPorToque: 0, // Nivel de tensión acumulada por toques
+            touchThreshold: 200 // Umbral de tensión para reventar por interacción
         };
         
         // Referencias a elementos del DOM
@@ -147,6 +149,7 @@
             casaState.interactionCount = 0;
             casaState.audioVolume = 0;
             casaState.maxAudioAmplitude = 0;
+            casaState.tensionPorToque = 0;
         }
         
         // Comprobar si un punto está dentro del contorno de la casa
@@ -438,7 +441,7 @@
                         const cp2y = current.y + 2 * (next.y - current.y) / 3;
                         
                         // Ajustar los puntos de control según la inflación
-                        const inflateFactor = 1 + casaState.inflation * 0.6; // Aumentado para que se infle más visiblemente
+                        const inflateFactor = 1 + casaState.inflation * 0.8; // Aumentado para que se infle más visiblemente
                         const midX = (current.x + next.x) / 2;
                         const midY = (current.y + next.y) / 2;
                         
@@ -449,8 +452,8 @@
                         
                         // Ajustar puntos de control para curvar hacia afuera
                         if (len > 0) {
-                            const inflateX = dx / len * casaState.inflation * 60; // AUMENTADO para inflar más dramáticamente
-                            const inflateY = dy / len * casaState.inflation * 60; // AUMENTADO para inflar más dramáticamente
+                            const inflateX = dx / len * casaState.inflation * 80; // AUMENTADO para inflar más dramáticamente
+                            const inflateY = dy / len * casaState.inflation * 80; // AUMENTADO para inflar más dramáticamente
                             
                             ctx.bezierCurveTo(
                                 cp1x + inflateX, cp1y + inflateY,
@@ -550,125 +553,42 @@
                     centerX, centerY, 1,
                     centerX, centerY, inflationIndicatorRadius
                 );
-                indicatorGradient.addColorStop(0, `rgba(255, ${255 - casaState.inflation * 200}, ${255 - casaState.inflation * 200}, ${0.4 + casaState.inflation * 0.3})`);
-                indicatorGradient.addColorStop(1, 'rgba(255, 200, 200, 0)');
+                indicatorGradient.addColorStop(0, `rgba(255, ${255 - casaState.inflation * 200}, ${255 - casa /* Continuación desde donde se cortó el código */
+State.inflation * 200}, ${255 - casaState.inflation * 200}, ${casaState.inflation * 0.5})`);
+                indicatorGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 
                 ctx.fillStyle = indicatorGradient;
                 ctx.arc(centerX, centerY, inflationIndicatorRadius, 0, Math.PI * 2);
-                ctx.fill
-                ;
                 ctx.fill();
             }
+            
+            // Dibujar datos de depuración
+            if (false) { // Cambiar a true para ver datos de depuración
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.fillRect(10, 10, 250, 130);
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Arial';
+                ctx.fillText(`Inflado: ${casaState.inflation.toFixed(2)}`, 20, 30);
+                ctx.fillText(`Audio Vol: ${casaState.audioVolume.toFixed(2)}`, 20, 50);
+                ctx.fillText(`Max Audio: ${casaState.maxAudioAmplitude.toFixed(2)}`, 20, 70);
+                ctx.fillText(`Tensión Toque: ${casaState.tensionPorToque.toFixed(2)}`, 20, 90);
+                ctx.fillText(`Interacciones: ${casaState.interactionCount}`, 20, 110);
+                ctx.fillText(`Rota: ${casaState.rota}`, 20, 130);
+            }
         }
         
-        // Función para actualizar el estado de inflado de la casa
-        function updateInflation() {
-            // Si la casa ya está rota, no continuar
+        // Función para reventar la casa
+        function popHouse(sourceX, sourceY) {
             if (casaState.rota) return;
             
-            // Aplicar audio como factor principal de inflado (AUMENTADO SIGNIFICATIVAMENTE)
-            if (audioInitialized) {
-                // Usar el volumen de audio para inflar
-                const audioInflationAmount = casaState.audioVolume * casaState.inflationFactor;
-                
-                // Inflar la casa según el volumen del audio (AUMENTADO)
-                casaState.inflation += audioInflationAmount * 0.03; // Aumentado para que la casa se infle más con el audio
-            }
-            
-            // Limitar el nivel de inflado
-            casaState.inflation = Math.min(1, Math.max(0, casaState.inflation));
-            
-            // Aumentar la opacidad inversa a la inflación
-            casaState.opacidad = 1 - casaState.inflation * 0.3;
-            
-            // Aumentar el brillo con la inflación
-            casaState.brillo = casaState.inflation * 0.5;
-            
-            // Si está demasiado inflada, tiene probabilidades de reventar
-            const tensionActual = casaState.inflation * 100;
-            if (tensionActual > casaState.tensionMax) {
-                const probabilidadReventar = (tensionActual - casaState.tensionMax) / 50; // Probabilidad creciente
-                if (Math.random() < probabilidadReventar) {
-                    popHouse();
-                }
-            }
-            
-            // La casa también se desinfla naturalmente cuando no hay audio
-            if (casaState.audioVolume < 0.1) {
-                casaState.inflation *= 0.99; // Se desinfla lentamente cuando no hay audio
-            }
-            
-            // Actualizar la posición de los puntos según la inflación
-            updateHousePoints();
-        }
-        
-        // Actualizar la posición de los puntos de la casa según la inflación
-        function updateHousePoints() {
-            // Calcular centro de la casa
-            let centerX = 0, centerY = 0;
-            for (let i = 0; i < casaState.puntos.length - 1; i++) {
-                centerX += casaState.puntos[i].origX;
-                centerY += casaState.puntos[i].origY;
-            }
-            centerX /= (casaState.puntos.length - 1);
-            centerY /= (casaState.puntos.length - 1);
-            
-            // Actualizar cada punto de la casa
-            for (let i = 0; i < casaState.puntos.length; i++) {
-                const punto = casaState.puntos[i];
-                
-                // Vector desde el centro al punto original
-                const dx = punto.origX - centerX;
-                const dy = punto.origY - centerY;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                
-                if (dist > 0) {
-                    // Factor de inflado que aumenta con la distancia al centro
-                    const inflationFactor = 1 + casaState.inflation * 0.5; // AUMENTADO para visualizar mejor el efecto de inflado
-                    
-                    // Ajustar posición
-                    punto.x = centerX + dx * inflationFactor;
-                    punto.y = centerY + dy * inflationFactor;
-                    
-                    // Añadir pequeña oscilación si hay audio alto
-                    if (casaState.audioVolume > 0.2) {
-                        const oscillation = Math.sin(Date.now() / 200 + i) * casaState.audioVolume * 5;
-                        punto.x += oscillation * dx / dist;
-                        punto.y += oscillation * dy / dist;
-                    }
-                    
-                    // Si hay interacción del cursor, aplicar distorsión en esa dirección
-                    if (casaState.cursorInteraccion) {
-                        const cursorDx = punto.x - casaState.cursorX;
-                        const cursorDy = punto.y - casaState.cursorY;
-                        const cursorDist = Math.sqrt(cursorDx*cursorDx + cursorDy*cursorDy);
-                        
-                        if (cursorDist < 150) {
-                            // El cursor ahora jala/tensa la casa en su propio eje, no la infla
-                            const tensionFactor = (1 - cursorDist / 150) * 20;
-                            punto.x += (cursorDx / cursorDist) * tensionFactor;
-                            punto.y += (cursorDy / cursorDist) * tensionFactor;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Hacer que la casa reviente
-        function popHouse() {
-            if (casaState.rota) return;
-            
-            // Reproducir sonido de explosión
+            // Reproducir sonido de pop
             popSound.currentTime = 0;
-            popSound.play();
+            popSound.play().catch(e => console.log("Error reproduciendo audio:", e));
             
-            casaState.rota = true;
+            // Generar fragmentos desde el punto de ruptura
             casaState.fragments = [];
             
-            // Definir número de fragmentos según el tamaño de la casa
-            const numFragments = 10 + Math.floor(Math.random() * 10);
-            
-            // Calcular centro de la casa
+            // Calcular centro para efectos
             let centerX = 0, centerY = 0;
             for (let i = 0; i < casaState.puntos.length - 1; i++) {
                 centerX += casaState.puntos[i].x;
@@ -677,58 +597,259 @@
             centerX /= (casaState.puntos.length - 1);
             centerY /= (casaState.puntos.length - 1);
             
-            // Crear fragmentos irregulares que salen disparados del centro
-            for (let i = 0; i < numFragments; i++) {
-                // Ángulo aleatorio para la dirección del fragmento
-                const angle = Math.random() * Math.PI * 2;
-                const distance = 30 + Math.random() * 20;
-                
-                // Tamaño aleatorio del fragmento
-                const size = 20 + Math.random() * 30;
-                
-                // Velocidades iniciales
-                const velocityX = Math.cos(angle) * (5 + Math.random() * 10);
-                const velocityY = Math.sin(angle) * (5 + Math.random() * 10);
-                const rotationSpeed = (Math.random() - 0.5) * 0.2;
-                
-                // Crear puntos del fragmento
-                const puntos = [];
-                const numPoints = 3 + Math.floor(Math.random() * 3); // 3-5 puntos por fragmento
-                
-                for (let j = 0; j < numPoints; j++) {
-                    const pointAngle = j * (Math.PI * 2 / numPoints);
-                    const pointRadius = size * (0.5 + Math.random() * 0.5);
-                    
-                    puntos.push({
-                        x: Math.cos(pointAngle) * pointRadius,
-                        y: Math.sin(pointAngle) * pointRadius
-                    });
+            // Punto de ruptura (o punto de máxima tensión)
+            const burstX = sourceX || centerX;
+            const burstY = sourceY || centerY;
+            
+            // Crear 6 a 10 fragmentos irregulares
+            const numFragments = 6 + Math.floor(Math.random() * 5);
+            
+            // Crear puntos para fragmentación
+            const fragPoints = [];
+            
+            // Hacer una copia profunda de los puntos actuales (inflados)
+            casaState.puntos.forEach((p, i) => {
+                if (i < casaState.puntos.length - 1) { // Evitar duplicar el último punto
+                    fragPoints.push({x: p.x, y: p.y});
                 }
+            });
+            
+            // Añadir puntos adicionales para fragmentación más detallada
+            const puntosExtra = [];
+            for (let i = 0; i < fragPoints.length; i++) {
+                const p1 = fragPoints[i];
+                const p2 = fragPoints[(i + 1) % fragPoints.length];
                 
-                // Cerrar el polígono
-                puntos.push({ ...puntos[0] });
+                // Añadir 2 puntos intermedios
+                puntosExtra.push({
+                    x: p1.x + (p2.x - p1.x) * 0.33,
+                    y: p1.y + (p2.y - p1.y) * 0.33
+                });
                 
-                // Añadir el fragmento
-                casaState.fragments.push({
-                    points: puntos,
-                    x: centerX + Math.cos(angle) * distance,
-                    y: centerY + Math.sin(angle) * distance,
-                    velocityX: velocityX,
-                    velocityY: velocityY,
-                    rotation: Math.random() * Math.PI * 2,
-                    rotationSpeed: rotationSpeed,
-                    transparency: 0,
-                    fadeSpeed: 0.005 + Math.random() * 0.01
+                puntosExtra.push({
+                    x: p1.x + (p2.x - p1.x) * 0.66,
+                    y: p1.y + (p2.y - p1.y) * 0.66
                 });
             }
             
-            // Programar reinicialización después de un tiempo
+            // Combinar los puntos originales con los extra y ordenarlos por ángulo desde el centro
+            fragPoints.push(...puntosExtra);
+            
+            // Agregar puntos aleatorios dentro de la forma para fragmentación interna
+            for (let i = 0; i < 10; i++) {
+                // Elegir dos puntos aleatorios del borde
+                const idx1 = Math.floor(Math.random() * fragPoints.length);
+                const idx2 = Math.floor(Math.random() * fragPoints.length);
+                const p1 = fragPoints[idx1];
+                const p2 = fragPoints[idx2];
+                
+                // Interpolar entre ellos con algo de aleatoriedad
+                const t = Math.random();
+                fragPoints.push({
+                    x: p1.x * t + p2.x * (1 - t) + (Math.random() - 0.5) * 20,
+                    y: p1.y * t + p2.y * (1 - t) + (Math.random() - 0.5) * 20
+                });
+            }
+            
+            // Calcular la línea de ruptura principal (desde el punto de ruptura hacia afuera)
+            const burstLines = [];
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.PI * 2 * i / 6;
+                const length = 50 + Math.random() * 100;
+                burstLines.push({
+                    x1: burstX,
+                    y1: burstY,
+                    x2: burstX + Math.cos(angle) * length,
+                    y2: burstY + Math.sin(angle) * length
+                });
+            }
+            
+            // Generar los fragmentos usando triangulación Delaunay (simplificado)
+            for (let i = 0; i < numFragments; i++) {
+                // Para cada fragmento, elegir un subconjunto aleatorio de puntos
+                const fragmentPoints = [];
+                const numPoints = 5 + Math.floor(Math.random() * 3);
+                
+                // Elegir un punto de inicio (cerca del borde preferiblemente)
+                const startIdx = Math.floor(Math.random() * fragPoints.length);
+                const startPoint = {x: fragPoints[startIdx].x, y: fragPoints[startIdx].y};
+                fragmentPoints.push(startPoint);
+                
+                // Añadir el punto de ruptura para asegurar que es parte de algún fragmento
+                if (i === 0) {
+                    fragmentPoints.push({x: burstX, y: burstY});
+                }
+                
+                // Encontrar puntos cercanos para formar un fragmento coherente
+                for (let j = 0; j < numPoints - 1; j++) {
+                    // Elegir un punto con cierta probabilidad según distancia
+                    const lastPoint = fragmentPoints[fragmentPoints.length - 1];
+                    let bestIdx = -1;
+                    let bestDist = Infinity;
+                    let bestScore = -Infinity;
+                    
+                    for (let k = 0; k < fragPoints.length; k++) {
+                        const p = fragPoints[k];
+                        // Evitar duplicados
+                        let isDuplicate = false;
+                        for (let l = 0; l < fragmentPoints.length; l++) {
+                            if (Math.abs(p.x - fragmentPoints[l].x) < 1 && Math.abs(p.y - fragmentPoints[l].y) < 1) {
+                                isDuplicate = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!isDuplicate) {
+                            const dist = Math.sqrt(Math.pow(p.x - lastPoint.x, 2) + Math.pow(p.y - lastPoint.y, 2));
+                            const angleFromCenter = Math.atan2(p.y - centerY, p.x - centerX);
+                            const angleLastFromCenter = Math.atan2(lastPoint.y - centerY, lastPoint.x - centerX);
+                            const angleDiff = Math.abs(angleFromCenter - angleLastFromCenter);
+                            
+                            // Preferir puntos que estén cercanos pero en dirección radial
+                            const score = -dist + (angleDiff < 0.5 ? 30 : 0);
+                            
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestIdx = k;
+                                bestDist = dist;
+                            }
+                        }
+                    }
+                    
+                    // Si encontramos un punto válido, añadirlo
+                    if (bestIdx >= 0 && bestDist < 150) {
+                        fragmentPoints.push({x: fragPoints[bestIdx].x, y: fragPoints[bestIdx].y});
+                    }
+                }
+                
+                // Ordenar los puntos por ángulo desde el centroide para garantizar un polígono convexo
+                if (fragmentPoints.length >= 3) {
+                    // Calcular centroide del fragmento
+                    let fcx = 0, fcy = 0;
+                    fragmentPoints.forEach(p => {
+                        fcx += p.x;
+                        fcy += p.y;
+                    });
+                    fcx /= fragmentPoints.length;
+                    fcy /= fragmentPoints.length;
+                    
+                    // Ordenar por ángulo
+                    fragmentPoints.sort((a, b) => {
+                        return Math.atan2(a.y - fcy, a.x - fcx) - Math.atan2(b.y - fcy, b.x - fcx);
+                    });
+                    
+                    // Crear la velocidad inicial del fragmento (desde el centro de ruptura)
+                    const dirX = fcx - burstX;
+                    const dirY = fcy - burstY;
+                    const dirLen = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+                    
+                    // Calcular centroide para posición del fragmento
+                    casaState.fragments.push({
+                        x: fcx,
+                        y: fcy,
+                        velocityX: dirX / dirLen * (2 + Math.random() * 3),
+                        velocityY: dirY / dirLen * (2 + Math.random() * 3),
+                        rotation: Math.random() * Math.PI * 2,
+                        rotationSpeed: (Math.random() - 0.5) * 0.2,
+                        points: fragmentPoints.map(p => ({x: p.x - fcx, y: p.y - fcy})),
+                        transparency: 0,
+                        gravity: 0.05 + Math.random() * 0.1
+                    });
+                }
+            }
+            
+            casaState.rota = true;
+            
+            // Programar recreación de la casa después de un tiempo
             setTimeout(() => {
                 initHouse();
-            }, 5000);
+                casaState.rota = false;
+            }, 5000); // Recrear después de 5 segundos
         }
         
-        // Actualizar los fragmentos de la casa rota
+        // Función para procesar el audio del micrófono
+        function processAudio(audioData) {
+            const bufferLength = audioData.length;
+            let sum = 0;
+            
+            // Calcular el volumen promedio reduciendo la sensibilidad
+            for (let i = 0; i < bufferLength; i++) {
+                sum += Math.abs(audioData[i]);
+            }
+            
+            const rawVolume = sum / bufferLength; // Volumen bruto
+            const amplifiedVolume = Math.pow(rawVolume, 1.5) * 2.5; // Ajustado para una respuesta más controlada
+            
+            // Aplicar un filtro de suavizado
+            casaState.audioVolume = casaState.audioVolume * 0.8 + amplifiedVolume * 0.2;
+            
+            // Actualizar máxima amplitud registrada si es necesario
+            if (casaState.audioVolume > casaState.maxAudioAmplitude) {
+                casaState.maxAudioAmplitude = casaState.audioVolume;
+            }
+            
+            // Normalizar en relación a lo máximo observado
+            const normalizedVolume = casaState.maxAudioAmplitude > 0 ? 
+                casaState.audioVolume / casaState.maxAudioAmplitude : 0;
+            
+            // Inflado controlado por audio
+            const audioInflation = normalizedVolume * casaState.inflationFactor;
+            casaState.inflation = Math.min(1.0, casaState.inflation + audioInflation);
+            
+            // Brillo basado en inflado
+            casaState.brillo = Math.pow(casaState.inflation, 2) * 0.6;
+            
+            // Reventar si el inflado llega al máximo
+            if (casaState.inflation >= 0.95 && !casaState.rota) {
+                popHouse();
+            }
+        }
+        
+        // Iniciar captura de audio (micrófono)
+        function initAudio() {
+            try {
+                // Solicitar acceso al micrófono
+                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                    .then(function(stream) {
+                        // Crear contexto de audio y conectar micrófono
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        microphone = audioContext.createMediaStreamSource(stream);
+                        analyser = audioContext.createAnalyser();
+                        
+                        // Configurar el analizador para datos de tiempo (waveform)
+                        analyser.fftSize = 1024;
+                        const bufferLength = analyser.frequencyBinCount;
+                        const dataArray = new Float32Array(bufferLength);
+                        
+                        // Conectar micrófono al analizador
+                        microphone.connect(analyser);
+                        
+                        // Crear nodo de procesamiento en tiempo real
+                        javascriptNode = audioContext.createScriptProcessor(1024, 1, 1);
+                        analyser.connect(javascriptNode);
+                        javascriptNode.connect(audioContext.destination);
+                        
+                        // Procesar datos de audio
+                        javascriptNode.onaudioprocess = function() {
+                            analyser.getFloatTimeDomainData(dataArray);
+                            processAudio(dataArray);
+                        };
+                        
+                        audioInitialized = true;
+                        console.log("Audio inicializado correctamente");
+                    })
+                    .catch(function(err) {
+                        console.error("Error al acceder al micrófono:", err);
+                        // Seguir con funcionalidad básica sin audio
+                        audioInitialized = false;
+                    });
+            } catch (e) {
+                console.error("Error al inicializar el audio:", e);
+                audioInitialized = false;
+            }
+        }
+        
+        // Actualizar lógica y posición de los fragmentos
         function updateFragments() {
             if (!casaState.rota) return;
             
@@ -736,274 +857,320 @@
                 // Actualizar posición
                 fragment.x += fragment.velocityX;
                 fragment.y += fragment.velocityY;
-                
-                // Aplicar gravedad
-                fragment.velocityY += 0.2;
-                
-                // Aplicar resistencia del aire
-                fragment.velocityX *= 0.98;
-                fragment.velocityY *= 0.98;
-                
-                // Actualizar rotación
                 fragment.rotation += fragment.rotationSpeed;
                 
-                // Aumentar transparencia gradualmente
-                fragment.transparency += fragment.fadeSpeed;
-                if (fragment.transparency > 1) fragment.transparency = 1;
+                // Aplicar gravedad
+                fragment.velocityY += fragment.gravity;
+                
+                // Fricción del aire
+                fragment.velocityX *= 0.99;
+                fragment.velocityY *= 0.99;
+                fragment.rotationSpeed *= 0.99;
+                
+                // Incrementar transparencia
+                fragment.transparency = Math.min(0.5, fragment.transparency + 0.003);
+                
+                // Si el fragmento sale de la pantalla, hacerlo desaparecer más rápido
+                if (fragment.y > canvas.height + 100 || 
+                    fragment.x < -100 || 
+                    fragment.x > canvas.width + 100) {
+                    fragment.transparency = Math.min(0.9, fragment.transparency + 0.01);
+                }
             });
         }
         
-        // Inicializar el análisis de audio
-        function setupAudioAnalysis() {
-            try {
-                // Verificar si el navegador soporta Web Audio API
-                window.AudioContext = window.AudioContext || window.webkitAudioContext;
-                audioContext = new AudioContext();
-                
-                // Crear analizador
-                analyser = audioContext.createAnalyser();
-                analyser.smoothingTimeConstant = 0.3;
-                analyser.fftSize = 1024;
-                
-                // Solicitar acceso al micrófono
-                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-                    .then(function(stream) {
-                        // Conectar el micrófono al analizador
-                        microphone = audioContext.createMediaStreamSource(stream);
-                        microphone.connect(analyser);
-                        
-                        // Crear un nodo JavaScript para procesar los datos del audio
-                        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-                        analyser.connect(javascriptNode);
-                        javascriptNode.connect(audioContext.destination);
-                        
-                        // Procesar los datos del audio
-                        javascriptNode.onaudioprocess = function() {
-                            const array = new Uint8Array(analyser.frequencyBinCount);
-                            analyser.getByteFrequencyData(array);
-                            
-                            // Calcular el volumen medio
-                            let values = 0;
-                            for (let i = 0; i < array.length; i++) {
-                                values += array[i];
-                            }
-                            const average = values / array.length;
-                            
-                            // Normalizar a un valor entre 0 y 1
-                            casaState.audioVolume = average / 128;
-                            
-                            // Actualizar la amplitud máxima para calibración
-                            if (casaState.audioVolume > casaState.maxAudioAmplitude) {
-                                casaState.maxAudioAmplitude = casaState.audioVolume;
-                            }
-                        };
-                        
-                        audioInitialized = true;
-                    })
-                    .catch(function(err) {
-                        console.error("Error al acceder al micrófono: ", err);
-                    });
-            } catch (e) {
-                console.error("Web Audio API no soportada: ", e);
+        // Manejar la desinflación gradual
+        function deflateHouse() {
+            if (casaState.rota) return;
+            
+            // Reducir inflado gradualmente (simulación de pérdida de aire)
+            casaState.inflation = Math.max(0, casaState.inflation - 0.001);
+            
+            // Actualizar otros parámetros basados en inflación
+            casaState.brillo = Math.pow(casaState.inflation, 2) * 0.6;
+            casaState.opacidad = 1 - casaState.inflation * 0.3;
+            
+            // Reducir la tensión acumulada por toques con el tiempo
+            casaState.tensionPorToque = Math.max(0, casaState.tensionPorToque - 0.5);
+            
+            // Resetear el contador de interacciones si pasa suficiente tiempo sin interactuar
+            const timeSinceLastInteraction = Date.now() - casaState.lastInteractionTime;
+            if (timeSinceLastInteraction > 1000) {
+                casaState.interactionCount = Math.max(0, casaState.interactionCount - 1);
             }
         }
         
-        // Manejar eventos de ratón/toque
-        function handleMouseMove(e) {
-            // Obtener coordenadas del cursor
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+        // Función principal de actualización (ciclo de animación)
+        function update() {
+            // Actualizar lógica
+            updateFragments();
+            deflateHouse();
             
-            casaState.cursorX = x;
-            casaState.cursorY = y;
+            // Dibujar
+            drawHouse();
             
-            if (casaState.dragging && casaState.dragIndex >= 0) {
-                // Mover punto seleccionado
-                const punto = casaState.puntos[casaState.dragIndex];
-                punto.x = x;
-                punto.y = y;
-                
-                // Marcar tiempo de última interacción
-                casaState.lastInteractionTime = Date.now();
-                
-            } else if (casaState.dragging && casaState.dragFragment !== null) {
-                // Mover fragmento seleccionado
-                const dx = x - casaState.lastX;
-                const dy = y - casaState.lastY;
-                
-                casaState.dragFragment.x += dx;
-                casaState.dragFragment.y += dy;
-                
-                casaState.lastX = x;
-                casaState.lastY = y;
-            } else {
-                // Verificar si el cursor está dentro de la casa (sólo si no está rota)
-                if (!casaState.rota) {
-                    const inside = isPointInHouse(x, y);
-                    casaState.cursorInteraccion = inside;
-                    
-                    if (inside) {
-                        // Calcular centro de la casa
-                        let centerX = 0, centerY = 0;
-                        for (let i = 0; i < casaState.puntos.length - 1; i++) {
-                            centerX += casaState.puntos[i].x;
-                            centerY += casaState.puntos[i].y;
-                        }
-                        centerX /= (casaState.puntos.length - 1);
-                        centerY /= (casaState.puntos.length - 1);
-                        
-                        // Calcular distancia al centro
-                        const dx = x - centerX;
-                        const dy = y - centerY;
-                        casaState.cursorDistancia = Math.sqrt(dx*dx + dy*dy);
-                    }
-                }
-            }
+            // Continuar ciclo de animación
+            requestAnimationFrame(update);
         }
         
-        function handleMouseDown(e) {
-            // Obtener coordenadas
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            casaState.lastX = x;
-            casaState.lastY = y;
-            
+        // Manejar interacciones de cursor/touch
+        function handlePointerInteraction(x, y, isDown) {
             if (casaState.rota) {
-                // Verificar si hemos seleccionado un fragmento
-                for (let i = 0; i < casaState.fragments.length; i++) {
-                    const fragment = casaState.fragments[i];
-                    const dx = x - fragment.x;
-                    const dy = y - fragment.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    
-                    if (dist < 50) {
-                        casaState.dragging = true;
-                        casaState.dragFragment = fragment;
-                        return;
+                // Si la casa está rota, permitir arrastrar fragmentos
+                if (isDown) {
+                    // Comprobar si el puntero está sobre algún fragmento
+                    for (let i = 0; i < casaState.fragments.length; i++) {
+                        const fragment = casaState.fragments[i];
+                        
+                        // Transformar las coordenadas del cursor al sistema de coordenadas del fragmento
+                        const dx = x - fragment.x;
+                        const dy = y - fragment.y;
+                        const distance = Math.sqrt(dx*dx + dy*dy);
+                        
+                        // Si está cerca del centro del fragmento, seleccionarlo
+                        if (distance < 50) {
+                            casaState.dragging = true;
+                            casaState.dragFragment = i;
+                            casaState.lastX = x;
+                            casaState.lastY = y;
+                            break;
+                        }
+                    }
+                } else {
+                    // Soltar fragmento
+                    if (casaState.dragging && casaState.dragFragment !== null) {
+                        const fragment = casaState.fragments[casaState.dragFragment];
+                        // Darle velocidad basada en el movimiento del arrastre
+                        const speedFactor = 0.2;
+                        fragment.velocityX = (x - casaState.lastX) * speedFactor;
+                        fragment.velocityY = (y - casaState.lastY) * speedFactor;
+                        casaState.dragging = false;
+                        casaState.dragFragment = null;
                     }
                 }
             } else {
-                // Comprobar si se ha seleccionado un punto de la casa
-                for (let i = 0; i < casaState.puntos.length; i++) {
-                    const punto = casaState.puntos[i];
-                    const dx = x - punto.x;
-                    const dy = y - punto.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    
-                    if (dist < 15) {
-                        casaState.dragging = true;
-                        casaState.dragIndex = i;
-                        return;
-                    }
-                }
+                // Si la casa no está rota, interactuar con ella
                 
-                // Si el cursor está dentro de la casa, incrementar contador de interacciones
-                if (isPointInHouse(x, y)) {
+                // Actualizamos posición del cursor para efectos
+                casaState.cursorX = x;
+                casaState.cursorY = y;
+                
+                // Calcular centro de la casa para distancia
+                let centerX = 0, centerY = 0;
+                for (let i = 0; i < casaState.puntos.length - 1; i++) {
+                    centerX += casaState.puntos[i].x;
+                    centerY += casaState.puntos[i].y;
+                }
+                centerX /= (casaState.puntos.length - 1);
+                centerY /= (casaState.puntos.length - 1);
+                
+                // Distancia del cursor al centro de la casa
+                const dx = x - centerX;
+                const dy = y - centerY;
+                casaState.cursorDistancia = Math.sqrt(dx*dx + dy*dy);
+                
+                // Comprobar si el cursor está interactuando con la casa
+                casaState.cursorInteraccion = isPointInHouse(x, y) || casaState.cursorDistancia < 150;
+                
+                if (isDown && casaState.cursorInteraccion) {
+                    // Registrar tiempo de última interacción
+                    casaState.lastInteractionTime = Date.now();
+                    
+                    // Incremento muy pequeño en la inflación por interacción
+                    casaState.inflation = Math.min(1.0, casaState.inflation + casaState.mouseInflationFactor);
+                    
+                    // Aumentar tensión acumulada por toques (especialmente si está muy inflada)
+                    const tensionIncrement = 1 + casaState.inflation * 10;
+                    casaState.tensionPorToque += tensionIncrement;
+                    
+                    // Incrementar contador de interacciones
                     casaState.interactionCount++;
                     
-                    // La casa se tensa pero no se infla con interacciones de cursor
-                    // Ya no incrementamos inflation aquí
-                    
-                    // Si hay demasiadas interacciones en poco tiempo, la casa revienta
-                    const now = Date.now();
-                    if (now - casaState.lastInteractionTime < 500 && casaState.interactionCount > 20) {
-                        popHouse();
+                    // Reventar si la tensión por toques supera el umbral
+                    if (casaState.tensionPorToque > casaState.touchThreshold) {
+                        popHouse(x, y);
                     }
                     
-                    casaState.lastInteractionTime = now;
+                    // También reventar si hay muchas interacciones rápidas
+                    if (casaState.interactionCount > 15) {
+                        popHouse(x, y);
+                    }
+                    
+                    // Si está arrastrando la casa (click/touch dentro)
+                    if (isPointInHouse(x, y)) {
+                        // Buscar el punto más cercano para distorsión
+                        let closestIdx = -1;
+                        let closestDist = Infinity;
+                        
+                        for (let i = 0; i < casaState.puntos.length - 1; i++) {
+                            const p = casaState.puntos[i];
+                            const dist = Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2));
+                            
+                            if (dist < closestDist) {
+                                closestDist = dist;
+                                closestIdx = i;
+                            }
+                        }
+                        
+                        // Aplicar tensión al punto más cercano si se encontró uno
+                        if (closestIdx >= 0 && closestDist < 100) {
+                            casaState.dragging = true;
+                            casaState.dragIndex = closestIdx;
+                            
+                            // Calcular dirección desde el centro
+                            const p = casaState.puntos[closestIdx];
+                            const dirX = p.x - centerX;
+                            const dirY = p.y - centerY;
+                            const dirLen = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+                            
+                            // Mover punto en dirección radial (simulando tensión)
+                            const pullStrength = 5 + casaState.inflation * 10; // Más fuerte cuando está más inflada
+                            const newX = p.x + (x - p.x) * 0.3;
+                            const newY = p.y + (y - p.y) * 0.3;
+                            
+                            // Limitar la distorsión para evitar distorsiones excesivas
+                            const origX = p.origX;
+                            const origY = p.origY;
+                            const distFromOrig = Math.sqrt(Math.pow(newX - origX, 2) + Math.pow(newY - origY, 2));
+                            
+                            // Calcular tensión basada en distancia desde posición original
+                            const tensionRatio = Math.min(1, distFromOrig / casaState.tensionMax);
+                            casaState.tensionPorToque += tensionRatio * 5;
+                            
+                            // Aplicar el movimiento con limitación
+                            if (distFromOrig < casaState.tensionMax) {
+                                p.x = newX;
+                                p.y = newY;
+                            } else {
+                                // Si excede la tensión máxima, reventar
+                                popHouse(p.x, p.y);
+                            }
+                        }
+                    }
+                } else {
+                    // Si no está presionando, devolver los puntos gradualmente a su posición original
+                    if (casaState.dragging) {
+                        casaState.dragging = false;
+                    }
+                    
+                    // Restaurar forma original gradualmente
+                    for (let i = 0; i < casaState.puntos.length - 1; i++) {
+                        const p = casaState.puntos[i];
+                        p.x = p.x + (p.origX - p.x) * casaState.elasticidad;
+                        p.y = p.y + (p.origY - p.y) * casaState.elasticidad;
+                    }
                 }
             }
         }
         
-        function handleMouseUp() {
-            casaState.dragging = false;
-            casaState.dragIndex = -1;
-            casaState.dragFragment = null;
+        // Actualizar posición de fragmentos arrastrados
+        function updateDraggedFragment() {
+            if (casaState.dragging && casaState.dragFragment !== null) {
+                const fragment = casaState.fragments[casaState.dragFragment];
+                // Mover el fragmento a la posición del cursor
+                fragment.x = casaState.cursorX;
+                fragment.y = casaState.cursorY;
+                // Detener su velocidad mientras está siendo arrastrado
+                fragment.velocityX = 0;
+                fragment.velocityY = 0;
+                fragment.rotationSpeed *= 0.9; // Reducir rotación
+            }
         }
         
-        function handleTouch(e) {
-            e.preventDefault();
-            if (e.touches.length > 0) {
-                const touch = e.touches[0];
-                const mouseEvent = {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY
-                };
-                handleMouseMove(mouseEvent);
-            }
+        // Handlers de eventos para mouse y touch
+        function handleMouseDown(e) {
+            handlePointerInteraction(e.clientX, e.clientY, true);
+        }
+        
+        function handleMouseMove(e) {
+            handlePointerInteraction(e.clientX, e.clientY, e.buttons > 0);
+            updateDraggedFragment();
+        }
+        
+        function handleMouseUp(e) {
+            handlePointerInteraction(e.clientX, e.clientY, false);
         }
         
         function handleTouchStart(e) {
             e.preventDefault();
             if (e.touches.length > 0) {
                 const touch = e.touches[0];
-                const mouseEvent = {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY
-                };
-                handleMouseDown(mouseEvent);
+                handlePointerInteraction(touch.clientX, touch.clientY, true);
+            }
+        }
+        
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                handlePointerInteraction(touch.clientX, touch.clientY, true);
+                updateDraggedFragment();
             }
         }
         
         function handleTouchEnd(e) {
             e.preventDefault();
-            handleMouseUp();
+            handlePointerInteraction(
+                e.changedTouches[0].clientX,
+                e.changedTouches[0].clientY,
+                false
+            );
         }
         
-        function animate() {
-            // Actualizar inflamación de la casa
-            updateInflation();
+        // Manejar cambios de tamaño de ventana
+        function handleResize() {
+            // Guardar estado actual
+            const prevInflation = casaState.inflation;
+            const prevRota = casaState.rota;
             
-            // Actualizar fragmentos si la casa está rota
-            updateFragments();
-            
-            // Dibujar la casa
-            drawHouse();
-            
-            // Solicitar el siguiente frame
-            requestAnimationFrame(animate);
+            // Reinicializar manteniendo estados importantes
+            initHouse();
+            casaState.inflation = prevInflation;
+            casaState.rota = prevRota;
         }
         
-        // Inicializar
+        // Iniciar la aplicación
         function init() {
-            // Inicializar casa
+            // Inicializar la forma de la casa
             initHouse();
             
-            // Configurar análisis de audio
-            setupAudioAnalysis();
-            
-            // Iniciar animación
-            animate();
-            
-            // Configurar eventos de ratón/touch
-            canvas.addEventListener('mousemove', handleMouseMove);
+            // Registrar event listeners
             canvas.addEventListener('mousedown', handleMouseDown);
-            window.addEventListener('mouseup', handleMouseUp);
-            
-            canvas.addEventListener('touchmove', handleTouch, {passive: false});
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('mouseup', handleMouseUp);
             canvas.addEventListener('touchstart', handleTouchStart, {passive: false});
-            window.addEventListener('touchend', handleTouchEnd, {passive: false});
+            canvas.addEventListener('touchmove', handleTouchMove, {passive: false});
+            canvas.addEventListener('touchend', handleTouchEnd, {passive: false});
+            window.addEventListener('resize', handleResize);
             
-            // Configurar redimensionamiento
-            window.addEventListener('resize', () => {
-                resizeCanvas();
-                initHouse();
-            });
+            // Intentar inicializar audio
+            try {
+                // Solo inicializar al interactuar para cumplir con políticas de autoplay
+                document.addEventListener('click', function initOnInteraction() {
+                    if (!audioInitialized) {
+                        initAudio();
+                    }
+                    document.removeEventListener('click', initOnInteraction);
+                });
+                
+                // También intentar inicializar en carga para dispositivos que lo permitan
+                window.addEventListener('load', function() {
+                    setTimeout(() => {
+                        if (!audioInitialized) {
+                            initAudio();
+                        }
+                    }, 1000);
+                });
+            } catch (e) {
+                console.error("Error al configurar audio:", e);
+            }
             
-            // Iniciar análisis de audio cuando se haga clic por primera vez (para permisos)
-            document.addEventListener('click', function initAudio() {
-                if (!audioInitialized) {
-                    setupAudioAnalysis();
-                    document.removeEventListener('click', initAudio);
-                }
-            });
+            // Comenzar ciclo de actualización y dibujo
+            update();
         }
         
-        // Iniciar cuando la página esté cargada
-        window.addEventListener('load', init);
+        // Iniciar todo cuando se cargue la página
+        init();
     </script>
 </body>
 </html>

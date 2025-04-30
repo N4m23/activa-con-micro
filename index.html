@@ -1252,3 +1252,324 @@ if (casaState.isBouncingActive) {
         });
         
         // Inicializar
+function init() {
+    // Configurar canvas
+    setupCanvas();
+    // Inicializar casa
+    initHouse();
+    // Iniciar bucle de dibujo
+    drawHouse();
+    
+    // Intentar precargar sonido
+    if (!popSound) {
+        popSound = new Audio('pop.mp3');
+        popSound.addEventListener('canplaythrough', function() {
+            console.log("Sound loaded");
+        });
+    }
+    
+    // Mostrar instrucciones dependiendo del dispositivo
+    const instructionsText = casaState.isMobile ? 
+        "Toca y mueve para inflar la casa. ¡Intenta reconstruirla si explota!" : 
+        "Haz clic y mueve el ratón para inflar la casa. Usa la rueda del ratón también. ¡Intenta reconstruirla si explota!";
+    
+    instructions.textContent = instructionsText;
+    
+    // Ocultar instrucciones después de unos segundos
+    setTimeout(() => {
+        if (instructions.style.opacity !== "0") {
+            instructions.style.opacity = "0";
+        }
+    }, 5000);
+}
+
+// Optimizaciones para dispositivos móviles
+function optimizeForMobile() {
+    if (casaState.isMobile) {
+        // Aumentar sensibilidad de inflado en dispositivos móviles
+        casaState.inflateSensitivity = 2.5; // Mayor sensibilidad
+        // Reducir umbral para que sea más fácil inflar completamente
+        casaState.inflateTreshold = 2.8;
+        // Hacer que la casa se infle más rápido con cada toque
+        casaState.inflateSpeed = 0.25;
+        // Reducir fricción para que mantenga el rebote más tiempo
+        casaState.frictionFactor = 0.98;
+        // Aumentar intensidad visual del efecto de presión
+        casaState.touchEffectSize = 30;
+        // Menos puntos para el contorno de la casa (mejor rendimiento)
+        casaState.vertexCount = 15;
+    } else {
+        // Configuración estándar para desktop
+        casaState.inflateSensitivity = 1.0;
+        casaState.inflateTreshold = 3.0;
+        casaState.inflateSpeed = 0.08;
+        casaState.frictionFactor = 0.95;
+        casaState.touchEffectSize = 20;
+        casaState.vertexCount = 20;
+    }
+}
+
+// Función para dibujar la cuadrícula con efecto de tensión
+function drawGrid(ctx, points, centerX, centerY) {
+    // No dibujar la cuadrícula si está muy inflada (para evitar las líneas no deseadas)
+    if (casaState.inflation > casaState.inflateTreshold * 0.8) {
+        return;
+    }
+    
+    const gridSize = 15;
+    const houseBounds = getHouseBounds(points);
+    const width = houseBounds.maxX - houseBounds.minX;
+    const height = houseBounds.maxY - houseBounds.minY;
+    
+    // Calcular distorsión basada en inflamación
+    const distortion = casaState.inflation * 0.5;
+    
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.1, 0.5 - casaState.inflation * 0.15);
+    ctx.strokeStyle = 'rgba(100, 100, 150, 0.3)';
+    ctx.lineWidth = 0.5;
+    
+    // Líneas horizontales
+    for (let y = houseBounds.minY; y <= houseBounds.maxY; y += gridSize) {
+        ctx.beginPath();
+        for (let x = houseBounds.minX; x <= houseBounds.maxX; x += 2) {
+            // Calcular distancia al centro
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            // Aplicar distorsión basada en distancia y nivel de inflado
+            // Función más suave para crear efecto de "globo de agua"
+            const factor = 1 + distortion * Math.pow(Math.max(0, 1 - distance / 100), 2);
+            
+            const newX = centerX + dx * factor;
+            const newY = centerY + dy * factor;
+            
+            if (x === houseBounds.minX) {
+                ctx.moveTo(newX, newY);
+            } else {
+                ctx.lineTo(newX, newY);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    // Líneas verticales
+    for (let x = houseBounds.minX; x <= houseBounds.maxX; x += gridSize) {
+        ctx.beginPath();
+        for (let y = houseBounds.minY; y <= houseBounds.maxY; y += 2) {
+            // Distorsión similar a las líneas horizontales
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            const factor = 1 + distortion * Math.pow(Math.max(0, 1 - distance / 100), 2);
+            
+            const newX = centerX + dx * factor;
+            const newY = centerY + dy * factor;
+            
+            if (y === houseBounds.minY) {
+                ctx.moveTo(newX, newY);
+            } else {
+                ctx.lineTo(newX, newY);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+// Obtener límites de la casa para dibujar la cuadrícula
+function getHouseBounds(points) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    points.forEach(point => {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+    });
+    
+    // Añadir un margen para que la cuadrícula sea un poco más grande que la casa
+    const margin = 5;
+    return {
+        minX: minX - margin,
+        minY: minY - margin,
+        maxX: maxX + margin,
+        maxY: maxY + margin
+    };
+}
+
+// Dibujar costuras o bordado alrededor de la casa
+function drawStitches(ctx, points, centerX, centerY) {
+    ctx.save();
+    
+    // Ajustar opacidad basada en nivel de inflado
+    ctx.globalAlpha = Math.max(0.4, 0.8 - casaState.inflation * 0.2);
+    ctx.strokeStyle = 'rgba(80, 80, 120, 0.7)';
+    ctx.lineWidth = 2;
+    
+    // Dibujar las costuras como pequeños trazos alrededor del contorno
+    const stitchLength = 4;
+    const stitchGap = 3;
+    
+    ctx.beginPath();
+    ctx.setLineDash([stitchLength, stitchGap]);
+    
+    // Dibujar siguiendo los puntos del contorno
+    for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        const nextPoint = points[(i + 1) % points.length];
+        
+        // Añadir efecto de distorsión a las costuras basado en inflación
+        const inflationEffect = casaState.inflation * 0.05;
+        
+        // Vector hacia el centro
+        const toCenterX = centerX - point.x;
+        const toCenterY = centerY - point.y;
+        const dist = Math.sqrt(toCenterX*toCenterX + toCenterY*toCenterY);
+        
+        // Punto ajustado con distorsión
+        let adjustedX1 = point.x;
+        let adjustedY1 = point.y;
+        let adjustedX2 = nextPoint.x;
+        let adjustedY2 = nextPoint.y;
+        
+        // Aplicar distorsión solo si hay distancia suficiente
+        if (dist > 0) {
+            // Normalizar vector
+            const nx = toCenterX / dist;
+            const ny = toCenterY / dist;
+            
+            // Aplicar distorsión inversamente proporcional a la distancia
+            // (para efecto de "globo de agua")
+            const factor = inflationEffect * Math.pow(Math.max(0, 1 - dist / 150), 2) * 80;
+            
+            adjustedX1 -= nx * factor;
+            adjustedY1 -= ny * factor;
+            adjustedX2 -= nx * factor;
+            adjustedY2 -= ny * factor;
+        }
+        
+        if (i === 0) {
+            ctx.moveTo(adjustedX1, adjustedY1);
+        }
+        
+        ctx.lineTo(adjustedX2, adjustedY2);
+    }
+    
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+}
+
+// Personalizar forma inicial de la casa
+function createHouseShape(centerX, centerY, size) {
+    // Crear forma básica de casa con techo triangular
+    const points = [];
+    const width = size * 0.8;
+    const height = size * 0.9;
+    const baseY = centerY + height * 0.3;
+    
+    // Base de la casa (más puntos para mejor distorsión)
+    const basePoints = casaState.vertexCount; // Ajustar según rendimiento
+    
+    // Crear puntos para la base y paredes
+    for (let i = 0; i < basePoints; i++) {
+        const angle = Math.PI + (Math.PI * i) / (basePoints - 1);
+        const x = centerX + Math.cos(angle) * width;
+        const y = baseY + Math.sin(angle) * (height * 0.6);
+        points.push({x, y});
+    }
+    
+    // Puntos para el techo
+    points.push({x: centerX - width, y: baseY - height * 0.3});
+    points.push({x: centerX, y: baseY - height * 0.9});
+    points.push({x: centerX + width, y: baseY - height * 0.3});
+    
+    return points;
+}
+
+// Gestionar mezcla suave entre estados de inflación
+function applyInflationEffect(points, centerX, centerY) {
+    const inflationFactor = casaState.inflation;
+    
+    // Transformar la casa hacia una forma más circular/ovalada según inflación
+    for (let i = 0; i < points.length; i++) {
+        const point = casaState.originalPuntos[i];
+        const currentPoint = points[i];
+        
+        // Vector desde el centro al punto original
+        const dx = point.x - centerX;
+        const dy = point.y - centerY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > 0) {
+            // Normalizar vector
+            const nx = dx / dist;
+            const ny = dy / dist;
+            
+            // Aplicar inflación no lineal (más como un globo de agua)
+            // La inflación es mayor en puntos más alejados del centro
+            const inflateAmount = inflationFactor * Math.pow(dist / 50, 0.7) * 15;
+            
+            // Combinar forma original con forma inflada
+            currentPoint.x = point.x + nx * inflateAmount;
+            currentPoint.y = point.y + ny * inflateAmount;
+        }
+    }
+}
+
+// Mejorar manejo de eventos táctiles
+function setupTouchHandling() {
+    // Evitar el scroll/zoom del navegador cuando se interactúa con el canvas
+    document.body.addEventListener('touchstart', function(e) {
+        if (e.target === canvas) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+    
+    // Mejorar detección de doble toque
+    let lastTapTime = 0;
+    canvas.addEventListener('touchstart', function(e) {
+        const now = Date.now();
+        const timeDiff = now - lastTapTime;
+        
+        if (timeDiff < 300 && timeDiff > 0) {
+            // Doble toque detectado - inflar rápidamente
+            casaState.inflation += casaState.inflateSpeed * 2;
+            e.preventDefault();
+            
+            // Activar rebote más intenso en doble toque
+            casaState.isBouncingActive = true;
+            casaState.bounceIntensity = 8;
+            casaState.bounceFrequency = 0.2;
+            
+            // Comprobar si debe reventar
+            if (casaState.inflation >= casaState.inflateTreshold) {
+                burstHouse();
+            }
+        }
+        
+        lastTapTime = now;
+    }, { passive: false });
+}
+
+// Inicio principal
+window.onload = function() {
+    // Detectar si es dispositivo móvil
+    casaState.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // Aplicar optimizaciones para móviles
+    optimizeForMobile();
+    
+    // Mejorar manejo de eventos táctiles
+    setupTouchHandling();
+    
+    // Iniciar
+    init();
+    
+    // Mostrar instrucciones brevemente
+    instructions.style.opacity = "1";
+};

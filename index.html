@@ -1,310 +1,977 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=800, initial-scale=1.0">
-  <title>Casa Globo Interactiva</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0; overflow: hidden; background: #000;
-      width: 100vw; height: 100vh;
-    }
-    body { display: flex; justify-content: center; align-items: center; }
-    canvas { display: block; background: #000; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Casa Globo Interactiva</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #000000; /* Fondo negro */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        #canvas-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+        }
+        
+        canvas {
+            border: 1px solid #333;
+            background-color: #000000; /* Fondo negro */
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+        }
+        
+        #restart {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: none;
+        }
+        
+        #restart:hover {
+            background-color: #45a049;
+        }
+        
+        #mic-status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            max-width: 500px;
+        }
+    </style>
 </head>
 <body>
-<canvas id="canvas" width="800" height="600"></canvas>
-<audio id="pop-sound" src="reventar.mp3" preload="auto"></audio>
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const popSound = document.getElementById('pop-sound');
+    <div id="canvas-container">
+        <canvas id="canvas" width="800" height="600"></canvas>
+        <button id="restart">Reiniciar</button>
+        <div id="mic-status">MicrÃ³fono: Desactivado</div>
+        <div id="instructions">
+            InteractÃºa con la casa: Mueve el cursor cerca para verla reaccionar. 
+            Haz ruido al micrÃ³fono para inflarla. Si se rompe, arrastra los fragmentos para intentar reconstruirla.
+        </div>
+    </div>
 
-let W = canvas.width;
-let H = canvas.height;
+    <audio id="pop-sound" src="reventar.mp3" preload="auto"></audio>
 
-// Estado de la casa
-let casa = {
-  x: W/2, y: H/2,
-  base: 120, altura: 180,
-  inflado: 0,
-  infladoMax: 2.3,
-  rota: false,
-  arrastrando: false,
-  offsetX: 0, offsetY: 0,
-  puntos: [],
-  puntosBordado: [],
-  bordeColor: '#8B4513', // Café
-  fragmentos: [],
-  brillo: 0.15
-};
-
-// Inicializar puntos de la casa
-function initCasa() {
-  casa.puntos = [
-    {x: -casa.base, y: casa.altura/2},
-    {x: -casa.base, y: -casa.altura/2 + 30},
-    {x: 0, y: -casa.altura/2 - 40},
-    {x: casa.base, y: -casa.altura/2 + 30},
-    {x: casa.base, y: casa.altura/2}
-  ];
-  // Bordado a lo largo del contorno
-  casa.puntosBordado = [];
-  for (let i = 0; i < casa.puntos.length - 1; i++) {
-    const p1 = casa.puntos[i], p2 = casa.puntos[i+1];
-    const dist = Math.hypot(p2.x-p1.x, p2.y-p1.y);
-    const n = Math.max(6, Math.floor(dist/15));
-    for (let j = 0; j < n; j++) {
-      const t = j / n;
-      casa.puntosBordado.push({
-        x: p1.x + (p2.x-p1.x)*t + (Math.random()-0.5)*2,
-        y: p1.y + (p2.y-p1.y)*t + (Math.random()-0.5)*2,
-        size: 2 + Math.random()*1.5
-      });
-    }
-  }
-  casa.inflado = 0;
-  casa.rota = false;
-  casa.fragmentos = [];
-}
-initCasa();
-
-// Micrófono
-let audioCtx, analyser, mic, dataArray, micActive = false;
-async function initMic() {
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const source = audioCtx.createMediaStreamSource(mic);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 1024;
-    source.connect(analyser);
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-    micActive = true;
-  } catch (e) { micActive = false; }
-}
-initMic();
-
-function getMicLevel() {
-  if (!micActive) return 0;
-  analyser.getByteFrequencyData(dataArray);
-  let sum = 0;
-  for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-  return sum / dataArray.length / 255;
-}
-
-// Dibuja la casa inflable
-function drawCasa() {
-  ctx.save();
-  ctx.translate(casa.x, casa.y);
-  let scale = 1 + casa.inflado;
-  ctx.scale(scale, scale);
-
-  // Sombra
-  ctx.beginPath();
-  ctx.ellipse(0, casa.altura/2 + 30, casa.base*0.9, 20, 0, 0, Math.PI*2);
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.fill();
-
-  // Cuerpo base (blanco, opacidad variable)
-  ctx.beginPath();
-  ctx.moveTo(casa.puntos[0].x, casa.puntos[0].y);
-  ctx.lineTo(casa.puntos[1].x, casa.puntos[1].y);
-  ctx.quadraticCurveTo(casa.puntos[2].x, casa.puntos[2].y, casa.puntos[3].x, casa.puntos[3].y);
-  ctx.lineTo(casa.puntos[4].x, casa.puntos[4].y);
-  ctx.closePath();
-
-  let op = 0.7 - 0.4 * casa.inflado;
-  ctx.fillStyle = `rgba(255,255,255,${op})`;
-  ctx.fill();
-
-  // Cuadrícula
-  ctx.save();
-  ctx.clip();
-  ctx.strokeStyle = `rgba(150,150,150,${op})`;
-  ctx.lineWidth = 1;
-  let gridStep = 18;
-  for (let x = -casa.base+10; x < casa.base; x += gridStep) {
-    ctx.beginPath();
-    ctx.moveTo(x, -casa.altura/2 + 20);
-    ctx.lineTo(x, casa.altura/2 - 10);
-    ctx.stroke();
-  }
-  for (let y = -casa.altura/2 + 20; y < casa.altura/2; y += gridStep) {
-    ctx.beginPath();
-    ctx.moveTo(-casa.base+10, y);
-    ctx.lineTo(casa.base-10, y);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Bordado (puntadas)
-  ctx.strokeStyle = casa.bordeColor;
-  ctx.lineWidth = 4;
-  ctx.setLineDash([12, 8]);
-  ctx.beginPath();
-  ctx.moveTo(casa.puntos[0].x, casa.puntos[0].y);
-  ctx.lineTo(casa.puntos[1].x, casa.puntos[1].y);
-  ctx.quadraticCurveTo(casa.puntos[2].x, casa.puntos[2].y, casa.puntos[3].x, casa.puntos[3].y);
-  ctx.lineTo(casa.puntos[4].x, casa.puntos[4].y);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Puntadas individuales
-  for (let i = 0; i < casa.puntosBordado.length; i++) {
-    let punto = casa.puntosBordado[i];
-    let size = punto.size * (1 + casa.inflado * 0.2);
-    ctx.save();
-    ctx.beginPath();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = casa.bordeColor;
-    ctx.moveTo(punto.x - size, punto.y - size);
-    ctx.lineTo(punto.x + size, punto.y + size);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(punto.x + size, punto.y - size);
-    ctx.lineTo(punto.x - size, punto.y + size);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Brillo látex (sutil, no exagerado)
-  if (casa.inflado > 0.5) {
-    ctx.beginPath();
-    ctx.ellipse(-casa.base/3, -casa.altura/3, 40, 18, -0.2, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(255,255,255,${casa.brillo})`;
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-// Fragmentos tras ruptura
-function drawFragmentos() {
-  casa.fragmentos.forEach(frag => {
-    ctx.save();
-    ctx.translate(frag.x, frag.y);
-    ctx.rotate(frag.rot);
-    ctx.beginPath();
-    ctx.moveTo(frag.p[0].x, frag.p[0].y);
-    for (let i = 1; i < frag.p.length; i++) ctx.lineTo(frag.p[i].x, frag.p[i].y);
-    ctx.closePath();
-    ctx.fillStyle = `rgba(255,255,255,${frag.alpha})`;
-    ctx.fill();
-    ctx.strokeStyle = casa.bordeColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-  });
-}
-
-// Lógica de fragmentos
-function crearFragmentos() {
-  casa.fragmentos = [];
-  for (let i = 0; i < 10; i++) {
-    let ang = Math.PI * 2 * i / 10;
-    let r = casa.base * 0.8;
-    let frag = {
-      x: casa.x + Math.cos(ang) * r,
-      y: casa.y + Math.sin(ang) * r,
-      rot: Math.random() * Math.PI,
-      vx: Math.cos(ang) * (2 + Math.random()*2),
-      vy: Math.sin(ang) * (2 + Math.random()*2),
-      alpha: 0.7,
-      p: [
-        {x: 0, y: 0},
-        {x: 30, y: -20},
-        {x: 40, y: 20},
-        {x: 10, y: 30}
-      ]
-    };
-    casa.fragmentos.push(frag);
-  }
-}
-
-// Animación principal
-function animate() {
-  ctx.clearRect(0,0,W,H);
-  if (!casa.rota) {
-    drawCasa();
-  } else {
-    drawFragmentos();
-    // Animar fragmentos
-    casa.fragmentos.forEach(frag => {
-      frag.x += frag.vx;
-      frag.y += frag.vy;
-      frag.vy += 0.1; // gravedad
-      frag.alpha -= 0.005;
-      if (frag.alpha < 0.1) frag.alpha = 0.1;
-    });
-  }
-  requestAnimationFrame(animate);
-}
-animate();
-
-// Inflado por micrófono
-setInterval(() => {
-  if (!casa.rota && micActive) {
-    let v = getMicLevel();
-    casa.inflado += (v*2 - casa.inflado) * 0.15;
-    if (casa.inflado > casa.infladoMax) {
-      casa.inflado = casa.infladoMax;
-      casa.rota = true;
-      crearFragmentos();
-      popSound.currentTime = 0;
-      popSound.play();
-    }
-  }
-}, 50);
-
-// Arrastrar la casa
-canvas.addEventListener('mousedown', e => {
-  if (casa.rota) return;
-  let mx = e.offsetX, my = e.offsetY;
-  let dx = mx - casa.x, dy = my - casa.y;
-  let scale = 1 + casa.inflado;
-  if (Math.abs(dx) < casa.base*scale && Math.abs(dy) < casa.altura/2*scale) {
-    casa.arrastrando = true;
-    casa.offsetX = dx;
-    casa.offsetY = dy;
-  }
-});
-canvas.addEventListener('mousemove', e => {
-  if (casa.arrastrando && !casa.rota) {
-    casa.x = e.offsetX - casa.offsetX;
-    casa.y = e.offsetY - casa.offsetY;
-  }
-});
-canvas.addEventListener('mouseup', e => {
-  casa.arrastrando = false;
-});
-
-// Arrastrar fragmentos tras ruptura
-let draggingFragment = null, dragOffset = {x:0, y:0};
-canvas.addEventListener('mousedown', e => {
-  if (!casa.rota) return;
-  let mx = e.offsetX, my = e.offsetY;
-  for (let frag of casa.fragmentos) {
-    let fx = frag.x, fy = frag.y;
-    if (Math.abs(mx-fx)<30 && Math.abs(my-fy)<30) {
-      draggingFragment = frag;
-      dragOffset.x = mx - fx;
-      dragOffset.y = my - fy;
-      break;
-    }
-  }
-});
-canvas.addEventListener('mousemove', e => {
-  if (draggingFragment) {
-    draggingFragment.x = e.offsetX - dragOffset.x;
-    draggingFragment.y = e.offsetY - dragOffset.y;
-  }
-});
-canvas.addEventListener('mouseup', e => {
-  draggingFragment = null;
-});
-
-</script>
+    <script>
+        // Variable para almacenar el audio context
+        let audioContext;
+        let analyser;
+        let microphone;
+        let javascriptNode;
+        let audioInitialized = false;
+        
+        // Estado de la casa
+        let casaState = {
+            inflada: true,
+            rota: false,
+            puntos: [],         // Puntos del borde de la casa
+            fragments: [],      // Fragmentos despuÃ©s de reventar
+            dragging: false,
+            dragIndex: -1,
+            dragFragment: null, // Para arrastrar fragmentos
+            lastX: 0,
+            lastY: 0,
+            inflation: 0,       // Nivel de inflado (0-1)
+            opacidad: 1,        // Opacidad de la tela (inversa a inflado)
+            elasticidad: 0.05,  // QuÃ© tan rÃ¡pido regresa a su forma
+            tensionMax: 80,     // TensiÃ³n mÃ¡xima antes de reventar
+            brillo: 0,          // Nivel de brillo del lÃ¡tex
+            bordeColor: '#8B4513', // Color cafÃ© para el bordado
+            cursorDistancia: 0, // Distancia del cursor a la casa
+            cursorInteraccion: false, // Si el cursor estÃ¡ interactuando con la casa
+            fragmentsSnapped: 0, // Contador de fragmentos en posiciÃ³n correcta
+            reconstruccionIniciada: false // Si se ha iniciado la reconstrucciÃ³n
+        };
+        
+        // Referencias a elementos del DOM
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const restartButton = document.getElementById('restart');
+        const micStatus = document.getElementById('mic-status');
+        const popSound = document.getElementById('pop-sound');
+        const instructions = document.getElementById('instructions');
+        
+        // Inicializar la forma de la casa con puntos de bordado
+        function initHouse() {
+            // Contorno de la casa con bordes mÃ¡s redondeados
+            casaState.puntos = [
+                {x: 300, y: 400, origX: 300, origY: 400},
+                {x: 300, y: 300, origX: 300, origY: 300},
+                {x: 300, y: 200, origX: 300, origY: 200},
+                {x: 350, y: 150, origX: 350, origY: 150},
+                {x: 400, y: 100, origX: 400, origY: 100},
+                {x: 450, y: 150, origX: 450, origY: 150},
+                {x: 500, y: 200, origX: 500, origY: 200},
+                {x: 500, y: 300, origX: 500, origY: 300},
+                {x: 500, y: 400, origX: 500, origY: 400},
+                {x: 300, y: 400, origX: 300, origY: 400}
+            ];
+            
+            // AÃ±adir puntos de bordado/costura a lo largo del contorno
+            casaState.puntosCostra = [];
+            for (let i = 0; i < casaState.puntos.length - 1; i++) {
+                const p1 = casaState.puntos[i];
+                const p2 = casaState.puntos[i + 1];
+                const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                const numPuntos = Math.max(5, Math.floor(dist / 10)); // Un punto cada 10px aprox
+                
+                for (let j = 0; j < numPuntos; j++) {
+                    const t = j / numPuntos;
+                    const x = p1.x + (p2.x - p1.x) * t;
+                    const y = p1.y + (p2.y - p1.y) * t;
+                    
+                    // AÃ±adir pequeÃ±a variaciÃ³n aleatoria para dar aspecto mÃ¡s natural
+                    const variacion = 2;
+                    const offsetX = (Math.random() - 0.5) * variacion;
+                    const offsetY = (Math.random() - 0.5) * variacion;
+                    
+                    casaState.puntosCostra.push({
+                        x: x + offsetX,
+                        y: y + offsetY,
+                        size: 1 + Math.random() * 1.5 // TamaÃ±o variable
+                    });
+                }
+            }
+            
+            casaState.inflation = 0;
+            casaState.opacidad = 1;
+            casaState.brillo = 0;
+            casaState.rota = false;
+            casaState.fragments = [];
+            casaState.fragmentsSnapped = 0;
+            casaState.reconstruccionIniciada = false;
+            
+            // Reiniciar instrucciones
+            instructions.innerHTML = 'InteractÃºa con la casa: Mueve el cursor cerca para verla reaccionar. ' +
+                                    'Haz ruido al micrÃ³fono para inflarla. Si se rompe, arrastra los fragmentos para intentar reconstruirla.';
+        }
+        
+        // Dibujar cuadrÃ­cula en la superficie para dar efecto de lÃ¡tex
+        function drawGrid(context, points, centerX, centerY, scale = 1) {
+            context.save();
+            context.strokeStyle = rgba(255, 255, 255, ${0.1 + casaState.brillo * 0.2});
+            context.lineWidth = 0.5;
+            
+            // Dibujar lÃ­neas horizontales y verticales
+            const gridSize = 10 * scale;
+            const gridRange = 150 * scale;
+            
+            for (let i = -gridRange; i <= gridRange; i += gridSize) {
+                context.beginPath();
+                context.moveTo(centerX - gridRange, centerY + i);
+                context.bezierCurveTo(
+                    centerX - gridRange/2, centerY + i * (1 + casaState.inflation * 0.2),
+                    centerX + gridRange/2, centerY + i * (1 + casaState.inflation * 0.2),
+                    centerX + gridRange, centerY + i
+                );
+                context.stroke();
+                
+                context.beginPath();
+                context.moveTo(centerX + i, centerY - gridRange);
+                context.bezierCurveTo(
+                    centerX + i * (1 + casaState.inflation * 0.2), centerY - gridRange/2,
+                    centerX + i * (1 + casaState.inflation * 0.2), centerY + gridRange/2,
+                    centerX + i, centerY + gridRange
+                );
+                context.stroke();
+            }
+            
+            context.restore();
+        }
+        
+        // Dibujar puntadas de bordado realistas
+        function drawStitches(context, points, centerX, centerY, isFragment = false) {
+            context.save();
+            
+            // ConfiguraciÃ³n para las puntadas
+            if (isFragment) {
+                // Para fragmentos, ajustar el dibujo de las puntadas
+                context.lineWidth = 1.5;
+                context.strokeStyle = casaState.bordeColor;
+                
+                // Dibujar las puntadas como pequeÃ±os segmentos inclinados en zigzag
+                context.beginPath();
+                
+                for (let i = 0; i < points.length - 1; i++) {
+                    const p1 = points[i];
+                    const p2 = points[i + 1];
+                    const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                    const numPuntos = Math.max(3, Math.floor(dist / 5));
+                    
+                    for (let j = 0; j < numPuntos; j++) {
+                        const t1 = j / numPuntos;
+                        const t2 = (j + 0.5) / numPuntos;
+                        
+                        const x1 = p1.x + (p2.x - p1.x) * t1;
+                        const y1 = p1.y + (p2.y - p1.y) * t1;
+                        
+                        const x2 = p1.x + (p2.x - p1.x) * t2;
+                        const y2 = p1.y + (p2.y - p1.y) * t2;
+                        
+                        // Desplazamiento perpendicular para el zigzag
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const len = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (len > 0) {
+                            const perpX = -dy / len * 2;
+                            const perpY = dx / len * 2;
+                            
+                            // Alternar la direcciÃ³n para zigzag
+                            const dir = j % 2 === 0 ? 1 : -1;
+                            
+                            context.moveTo(x1, y1);
+                            context.lineTo(x2 + perpX * dir, y2 + perpY * dir);
+                        }
+                    }
+                }
+                
+                context.stroke();
+            } else {
+                // Para la casa completa, dibujar puntadas individuales en los puntos predefinidos
+                for (let i = 0; i < casaState.puntosCostra.length; i++) {
+                    const punto = casaState.puntosCostra[i];
+                    const size = punto.size * (1 + casaState.inflation * 0.2);
+                    
+                    // Dibujar el punto con un estilo de puntada cruzada
+                    context.lineWidth = 1.5;
+                    context.strokeStyle = casaState.bordeColor;
+                    
+                    context.beginPath();
+                    context.moveTo(punto.x - size, punto.y - size);
+                    context.lineTo(punto.x + size, punto.y + size);
+                    context.stroke();
+                    
+                    context.beginPath();
+                    context.moveTo(punto.x + size, punto.y - size);
+                    context.lineTo(punto.x - size, punto.y + size);
+                    context.stroke();
+                }
+            }
+            
+            context.restore();
+        }
+        
+        // Dibujar la casa segÃºn su estado actual
+        function drawHouse() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (casaState.rota) {
+                // Dibujar los fragmentos de la casa rota
+                casaState.fragments.forEach(fragment => {
+                    ctx.save();
+                    ctx.translate(fragment.x, fragment.y);
+                    ctx.rotate(fragment.rotation);
+                    
+                    // Efecto de destacado si el fragmento estÃ¡ cerca de su posiciÃ³n original
+                    if (fragment.isSnapped) {
+                        ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
+                        ctx.shadowBlur = 15;
+                    } else if (fragment.isClose) {
+                        ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+                        ctx.shadowBlur = 10;
+                    }
+                    
+                    // Dibujar el fragmento
+                    ctx.beginPath();
+                    fragment.points.forEach((point, i) => {
+                        if (i === 0) {
+                            ctx.moveTo(point.x, point.y);
+                        } else {
+                            ctx.lineTo(point.x, point.y);
+                        }
+                    });
+                    ctx.closePath();
+                    
+                    // Efecto de brillo para lÃ¡tex
+                    const gradientFill = ctx.createRadialGradient(0, 0, 5, 0, 0, 50);
+                    gradientFill.addColorStop(0, rgba(255, 255, 255, ${0.8 - fragment.transparency}));
+                    gradientFill.addColorStop(0.7, rgba(220, 220, 240, ${0.6 - fragment.transparency}));
+                    gradientFill.addColorStop(1, rgba(200, 200, 230, ${0.5 - fragment.transparency}));
+                    ctx.fillStyle = gradientFill;
+                    ctx.fill();
+                    
+                    // Dibujar el contorno del fragmento
+                    ctx.strokeStyle = 'rgba(200, 200, 230, 0.8)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    
+                    // Dibujar el bordado con realismo
+                    drawStitches(ctx, fragment.points, 0, 0, true);
+                    
+                    // Dibujar cuadrÃ­cula en el fragmento para efecto de lÃ¡tex
+                    drawGrid(ctx, fragment.points, 0, 0, 0.5);
+                    
+                    ctx.restore();
+                });
+                
+                // Si estamos en modo reconstrucciÃ³n, dibujar guÃ­a
+                if (casaState.reconstruccionIniciada) {
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 5]);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(300, 400);
+                    ctx.lineTo(300, 200);
+                    ctx.bezierCurveTo(320, 160, 380, 120, 400, 100);
+                    ctx.bezierCurveTo(420, 120, 480, 160, 500, 200);
+                    ctx.lineTo(500, 400);
+                    ctx.lineTo(300, 400);
+                    ctx.stroke();
+                    
+                    ctx.restore();
+                }
+            } else {
+                // Dibujar la casa inflada con efecto redondeado y brillante
+                ctx.beginPath();
+                
+                // Dibujar la casa con curvas Bezier para bordes mÃ¡s redondeados
+                ctx.moveTo(casaState.puntos[0].x, casaState.puntos[0].y);
+                
+                for (let i = 0; i < casaState.puntos.length - 1; i++) {
+                    const current = casaState.puntos[i];
+                    const next = casaState.puntos[i + 1];
+                    
+                    if (i === 0 || i === casaState.puntos.length - 2) {
+                        // Para el primer y Ãºltimo segmento, usamos lÃ­nea recta
+                        ctx.lineTo(next.x, next.y);
+                    } else {
+                        // Para los demÃ¡s segmentos, usamos curvas
+                        const cp1x = current.x + (next.x - current.x) / 3;
+                        const cp1y = current.y + (next.y - current.y) / 3;
+                        const cp2x = current.x + 2 * (next.x - current.x) / 3;
+                        const cp2y = current.y + 2 * (next.y - current.y) / 3;
+                        
+                        // Ajustar los puntos de control segÃºn la inflaciÃ³n
+                        const inflateFactor = 1 + casaState.inflation * 0.3;
+                        const midX = (current.x + next.x) / 2;
+                        const midY = (current.y + next.y) / 2;
+                        const centerX = 400;
+                        const centerY = 250;
+                        
+                        // DirecciÃ³n desde el centro hacia el punto medio
+                        const dx = midX - centerX;
+                        const dy = midY - centerY;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        
+                        // Ajustar puntos de control para curvar hacia afuera
+                        if (len > 0) {
+                            const inflateX = dx / len * casaState.inflation * 20;
+                            const inflateY = dy / len * casaState.inflation * 20;
+                            
+                            ctx.bezierCurveTo(
+                                cp1x + inflateX, cp1y + inflateY,
+                                cp2x + inflateX, cp2y + inflateY,
+                                next.x, next.y
+                            );
+                        } else {
+                            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, next.x, next.y);
+                        }
+                    }
+                }
+                
+                ctx.closePath();
+                
+                // Efecto de brillo para el lÃ¡tex con degradado
+                const centerX = 400;
+                const centerY = 250;
+                const radius = 150 + casaState.inflation * 50;
+                const gradient = ctx.createRadialGradient(
+                    centerX, centerY, radius * 0.2,
+                    centerX - 40, centerY - 40, radius * 1.2
+                );
+                
+                // Colores del degradado segÃºn nivel de inflado
+                const alpha = 0.9 - casaState.inflation * 0.2;
+                gradient.addColorStop(0, rgba(255, 255, 255, ${0.8 + casaState.brillo * 0.2}));
+                gradient.addColorStop(0.5, rgba(230, 230, 240, ${0.7 + casaState.brillo * 0.2}));
+                gradient.addColorStop(1, rgba(200, 200, 230, ${alpha}));
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                
+                // Dibujar el contorno
+                ctx.strokeStyle = 'rgba(200, 200, 230, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Dibujar el bordado con puntadas realistas
+                drawStitches(ctx, casaState.puntos, centerX, centerY);
+                
+                // AÃ±adir cuadrÃ­cula para efecto de lÃ¡tex
+                drawGrid(ctx, casaState.puntos, centerX, centerY);
+                
+                // AÃ±adir brillo especular para efecto de lÃ¡tex
+                ctx.beginPath();
+                const highlightRadius = 25 + casaState.inflation * 15;
+                const highlightGradient = ctx.createRadialGradient(
+                    centerX - 30, centerY - 30, 5,
+                    centerX - 30, centerY - 30, highlightRadius
+                );
+                highlightGradient.addColorStop(0, rgba(255, 255, 255, ${0.7 + casaState.brillo * 0.3}));
+                highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
+                ctx.fillStyle = highlightGradient;
+                ctx.arc(centerX - 30, centerY - 30, highlightRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Mostrar la interacciÃ³n del cursor
+                if (casaState.cursorInteraccion) {
+                    // Efecto de distorsiÃ³n en la direcciÃ³n del cursor
+                    const cursorEffect = 1 - Math.min(1, casaState.cursorDistancia / 150);
+                    if (cursorEffect > 0.1) {
+                        ctx.beginPath();
+                        const pulseRadius = 15 + Math.sin(Date.now() / 200) * 5;
+                        const pulseGradient = ctx.createRadialGradient(
+                            casaState.cursorX, casaState.cursorY, 1,
+                            casaState.cursorX, casaState.cursorY, pulseRadius * (1 + casaState.inflation)
+                        );
+                        pulseGradient.addColorStop(0, rgba(255, 255, 255, ${0.6 * cursorEffect}));
+                        pulseGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                        
+                        ctx.fillStyle = pulseGradient;
+                        ctx.arc(casaState.cursorX, casaState.cursorY, pulseRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+        
+        // Actualizar la fÃ­sica y el estado de la casa
+        function updateHouse() {
+            if (casaState.rota) {
+                // Actualizar fragmentos de la casa rota
+                casaState.fragments.forEach(fragment => {
+                    // Si no estÃ¡ acoplado y no lo estamos arrastrando
+                    if (!fragment.isSnapped && fragment !== casaState.dragFragment) {
+                        // Aplicar gravedad y velocidad con lÃ­mites para mantener en pantalla
+                        fragment.y += fragment.velocityY;
+                        fragment.x += fragment.velocityX;
+                        fragment.velocityY += 0.1; // Gravedad
+                        fragment.rotation += fragment.rotationSpeed;
+                        
+                        // Si no estamos en modo reconstrucciÃ³n, hacer desvanecer
+                        if (!casaState.reconstruccionIniciada) {
+                            fragment.transparency += 0.001; // Desvanecer mÃ¡s lentamente
+                        }
+                        
+                        // Mantener los fragmentos dentro del canvas
+                        if (fragment.y > canvas.height - 50) {
+                            fragment.y = canvas.height - 50;
+                            fragment.velocityY *= -0.4; // Rebote amortiguado
+                            fragment.velocityX *= 0.8; // FricciÃ³n
+                        }
+                        
+                        if (fragment.y < 50) {
+                            fragment.y = 50;
+                            fragment.velocityY *= -0.4;
+                        }
+                        
+                        if (fragment.x > canvas.width - 50) {
+                            fragment.x = canvas.width - 50;
+                            fragment.velocityX *= -0.4;
+                        }
+                        
+                        if (fragment.x < 50) {
+                            fragment.x = 50;
+                            fragment.velocityX *= -0.4;
+                        }
+                        
+                        // Si estÃ¡ en modo reconstrucciÃ³n, verificar si estÃ¡ cerca de su posiciÃ³n objetivo
+                        if (casaState.reconstruccionIniciada) {
+                            const dx = fragment.origX - fragment.x;
+                            const dy = fragment.origY - fragment.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+                            const rotDiff = Math.abs(fragment.origRotation - fragment.rotation) % (Math.PI * 2);
+                            
+                            // Marcar si estÃ¡ cerca
+                            fragment.isClose = dist < 50 && rotDiff < Math.PI/4;
+                            
+                            // Si estÃ¡ muy cerca, acoplar en su posiciÃ³n
+                            if (dist < 20 && rotDiff < Math.PI/8) {
+                                fragment.isSnapped = true;
+                                fragment.x = fragment.origX;
+                                fragment.y = fragment.origY;
+                                fragment.rotation = fragment.origRotation;
+                                fragment.velocityX = 0;
+                                fragment.velocityY = 0;
+                                fragment.rotationSpeed = 0;
+                                
+                                // Incrementar contador de fragmentos acoplados
+                                if (!fragment.counted) {
+                                    fragment.counted = true;
+                                    casaState.fragmentsSnapped++;
+                                    
+                                    // Si todos los fragmentos estÃ¡n acoplados, reconstruir la casa
+                                    if (casaState.fragmentsSnapped >= casaState.fragments.length) {
+                                        reconstructHouse();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Si no estamos en modo reconstrucciÃ³n, comprobar si todos los fragmentos se han desvanecido
+                if (!casaState.reconstruccionIniciada) {
+                    const allFaded = casaState.fragments.every(f => f.transparency > 0.5);
+                    if (allFaded) {
+                        // Mostrar botÃ³n de reinicio y opciÃ³n de reconstrucciÃ³n
+                        restartButton.style.display = 'block';
+                        instructions.innerHTML = 'Â¡La casa globo ha reventado! Puedes reiniciar o intentar reconstruirla haciendo clic en algÃºn fragmento.';
+                    }
+                }
+            } else {
+                // Aplicar fuerzas de elasticidad a los puntos
+                casaState.puntos.forEach((punto, index) => {
+                    if (index > 0 && index < casaState.puntos.length - 1) {
+                        // Fuerza para regresar al punto original
+                        const dx = punto.origX - punto.x;
+                        const dy = punto.origY - punto.y;
+                        
+                        // Aplicar fuerza con la elasticidad configurada
+                        punto.x += dx * casaState.elasticidad;
+                        punto.y += dy * casaState.elasticidad;
+                    }
+                });
+                
+                // Reducir gradualmente la inflaciÃ³n si no hay entrada de audio
+                if (casaState.inflation > 0) {
+                    casaState.inflation -= 0.005; // ReducciÃ³n mÃ¡s lenta
+                    if (casaState.inflation < 0) casaState.inflation = 0;
+                }
+                
+                // Ajustar brillo con la inflaciÃ³n
+                casaState.brillo = casaState.inflation * 0.8;
+                
+                // Comprobar si la casa estÃ¡ muy estirada y debe romperse
+                checkTension();
+            }
+        }
+        
+        // Comprobar si la tensiÃ³n de la casa es excesiva
+        function checkTension() {
+            let maxDistance = 0;
+            
+            // Calcular la distancia mÃ¡xima de un punto a su posiciÃ³n original
+            casaState.puntos.forEach((punto, index) => {
+                if (index > 0 && index < casaState.puntos.length - 1) {
+                    const dx = punto.x - punto.origX;
+                    const dy = punto.y - punto.origY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    maxDistance = Math.max(maxDistance, distance);
+                }
+            });
+            
+            // Si se supera la tensiÃ³n mÃ¡xima, romper la casa
+            if (maxDistance > casaState.tensionMax || casaState.inflation >= 1) {
+                breakHouse();
+            }
+        }
+        
+        // Romper la casa en fragmentos
+        function breakHouse() {
+            // Reproducir sonido de reventar
+            playPopSound();
+            
+            // Crear fragmentos de la casa rota
+            casaState.rota = true;
+            casaState.fragments = [];
+            
+            // NÃºmero de fragmentos (mÃ¡s fragmentos con mayor inflaciÃ³n)
+            const numFragments = 10 + Math.floor(casaState.inflation * 8);
+            
+            // Posiciones originales para reconstrucciÃ³n
+            const casaWidth = 200;  // Ancho aproximado de la casa
+            const casaHeight = 300; // Alto aproximado de la casa
+            const centerX = 400;
+            const centerY = 250;
+            
+            // Crear cada fragmento con propiedades fÃ­sicas
+            for (let i = 0; i < numFragments; i++) {
+                // Ãngulo y distancia para este fragmento
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 20 + Math.random() * 30;
+                
+                // PosiciÃ³n inicial (dentro de la casa)
+                const startX = centerX + Math.cos(angle) * distance * 0.5;
+                const startY = centerY + Math.sin(angle) * distance * 0.5;
+                
+                // PosiciÃ³n objetivo para reconstrucciÃ³n 
+                const targetX = centerX + Math.cos(angle) * distance;
+                const targetY = centerY + Math.sin(angle) * distance;
+                
+                // Velocidad inicial (explosiÃ³n desde el centro)
+                const velocityMag = 2 + Math.random() * 3 + casaState.inflation * 2;
+                const velocityX = Math.cos(angle) * velocityMag;
+                const velocityY = Math.sin(angle) * velocityMag;
+                
+                // Crear puntos aleatorios para el fragmento con forma irregular
+                const fragmentPoints = [];
+                const numPoints = 5 + Math.floor(Math.random() * 3);
+                const fragmentSize = 15 + Math.random() * 25;
+                
+                // Crear forma irregular pero realista
+                for (let j = 0; j < numPoints; j++) {
+                    const pointAngle = j * (Math.PI * 2 / numPoints);
+                    const pointDist = fragmentSize * (0.7 + Math.random() * 0.6);
+                    const wobble = 0.4 + Math.random() * 0.3; // Irregularidad
+                    
+                    fragmentPoints.push({
+                        x: Math.cos(pointAngle) * pointDist * wobble,
+                        y: Math.sin(pointAngle) * pointDist * wobble
+                    });
+                }
+                
+                // RotaciÃ³n original para reconstrucciÃ³n
+                const origRotation = Math.random() * Math.PI * 2;
+                
+                // AÃ±adir el fragmento a la lista
+                casaState.fragments.push({
+                    x: startX,
+                    y: startY,
+                    velocityX: velocityX,
+                    velocityY: velocityY,
+                    rotation: origRotation,
+                    rotationSpeed: (Math.random() - 0.5) * 0.1,
+                    points: fragmentPoints,
+                    transparency: 0,
+                    origX: targetX,          // PosiciÃ³n original para reconstrucciÃ³n
+                    origY: targetY,          // PosiciÃ³n original para reconstrucciÃ³n
+                    origRotation: origRotation, // RotaciÃ³n original
+                    isSnapped: false,        // Si estÃ¡ en posiciÃ³n correcta
+                    isClose: false,          // Si estÃ¡ cerca de la posiciÃ³n correcta
+                    counted: false           // Para contar fragmentos reconstruidos una sola vez
+                });
+            }
+            
+            // Actualizar instrucciones
+            instructions.innerHTML = 'Â¡La casa globo ha reventado! Los fragmentos se desvanecerÃ¡n. ' +
+                                    'Haz clic en un fragmento para intentar reconstruirla.';
+        }
+        
+        // Reconstruir la casa a partir de los fragmentos
+        function reconstructHouse() {
+            setTimeout(() => {
+                casaState.rota = false;
+                initHouse();
+                
+                // Mensaje de Ã©xito
+                instructions.innerHTML = 'Â¡Felicidades! Has reconstruido la casa globo. ' +
+                                        'Ahora puedes volver a interactuar con ella.';
+            }, 1000);
+        }
+        
+        // Reproducir el sonido de reventar
+        function playPopSound() {
+            popSound.currentTime = 0;
+            popSound.play().catch(e => console.log("Error reproduciendo sonido:", e));
+        }
+        
+        // Configurar los eventos de mouse
+        function setupMouseEvents() {
+            canvas.addEventListener('mousedown', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                if (casaState.rota) {
+                    // Intentar seleccionar un fragmento
+                    for (let i = 0; i < casaState.fragments.length; i++) {
+                        const fragment = casaState.fragments[i];
+                        
+                        // No permitir arrastrar fragmentos ya acoplados
+                        if (fragment.isSnapped) continue;
+                        
+                        // Calcular distancia al centro del fragmento
+                        const dx = fragment.x - mouseX;
+                        const dy = fragment.y - mouseY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < 30) {  // Radio de captura
+                            casaState.dragging = true;
+                            casaState.dragFragment = fragment;
+                            casaState.lastX = mouseX;
+                            casaState.lastY = mouseY;
+                            
+                            // Iniciar modo reconstrucciÃ³n si es el primer fragmento que se arrastra
+                            if (!casaState.reconstruccionIniciada) {
+                                casaState.reconstruccionIniciada = true;
+                                // Actualizar instrucciones
+                                instructions.innerHTML = 'Modo reconstrucciÃ³n activado. ' +
+                                                        'Arrastra los fragmentos a su posiciÃ³n original para reconstruir la casa.';
+                                // Mostrar botÃ³n de reinicio
+                                restartButton.style.display = 'block';
+                            }
+                            
+                            // Detener fÃ­sicas para el fragmento seleccionado
+                            fragment.velocityX = 0;
+                            fragment.velocityY = 0;
+                            fragment.rotationSpeed = 0;
+                            
+                            break;
+                        }
+                    }
+                } else {
+                    // Detectar si el clic estÃ¡ en un punto de la casa
+                    for (let i = 0; i < casaState.puntos.length; i++) {
+                        const punto = casaState.puntos[i];
+                        const dx = punto.x - mouseX;
+                        const dy = punto.y - mouseY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < 20) {
+                            casaState.dragging = true;
+                            casaState.dragIndex = i;
+                            casaState.lastX = mouseX;
+                            casaState.lastY = mouseY;
+                            break;
+                        }
+                    }
+                }
+            });
+            
+            canvas.addEventListener('mousemove', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                // Actualizar posiciÃ³n del cursor para interacciÃ³n
+                casaState.cursorX = mouseX;
+                casaState.cursorY = mouseY;
+                
+                if (casaState.dragging) {
+                    if (casaState.rota && casaState.dragFragment) {
+                        // Arrastrar fragmento
+                        const dx = mouseX - casaState.lastX;
+                        const dy = mouseY - casaState.lastY;
+                        
+                        casaState.dragFragment.x += dx;
+                        casaState.dragFragment.y += dy;
+                        
+                        casaState.lastX = mouseX;
+                        casaState.lastY = mouseY;
+                    } else if (!casaState.rota && casaState.dragIndex >= 0) {
+                        // Solo mover puntos que no son los bordes fijos
+                        if (casaState.dragIndex > 0 && casaState.dragIndex < casaState.puntos.length - 1) {
+                            const dx = mouseX - casaState.lastX;
+                            const dy = mouseY - casaState.lastY;
+                            
+                            casaState.puntos[casaState.dragIndex].x += dx;
+                            casaState.puntos[casaState.dragIndex].y += dy;
+                            
+                            casaState.lastX = mouseX;
+                            casaState.lastY = mouseY;
+                        }
+                    }
+                } else if (!casaState.rota) {
+                    // Calcular distancia del cursor al centro de la casa para interacciÃ³n
+                    const centerX = 400;
+                    const centerY = 250;
+                    const dx = mouseX - centerX;
+                    const dy = mouseY - centerY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    casaState.cursorDistancia = distance;
+                    casaState.cursorInteraccion = distance < 200;
+                    
+                    // Aplicar fuerza para deformar ligeramente la casa en direcciÃ³n al cursor
+                    if (casaState.cursorInteraccion) {
+                        const cursorEffect = 1 - Math.min(1, distance / 200);
+                        
+                        casaState.puntos.forEach((punto, index) => {
+                            if (index > 0 && index < casaState.puntos.length - 1) {
+                                // DirecciÃ³n desde el punto al cursor
+                                const px = mouseX - punto.x;
+                                const py = mouseY - punto.y;
+                                const len = Math.sqrt(px * px + py * py);
+                                
+                                if (len > 0) {
+                                    // Aplicar una pequeÃ±a atracciÃ³n hacia el cursor
+                                    const factor = Math.max(0, 1 - len / 150) * cursorEffect * 2;
+                                    punto.x += (px / len) * factor;
+                                    punto.y += (py / len) * factor;
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+            
+            canvas.addEventListener('mouseup', function() {
+                casaState.dragging = false;
+                casaState.dragIndex = -1;
+                casaState.dragFragment = null;
+            });
+            
+            canvas.addEventListener('mouseleave', function() {
+                casaState.dragging = false;
+                casaState.dragIndex = -1;
+                casaState.dragFragment = null;
+                casaState.cursorInteraccion = false;
+            });
+            
+            // BotÃ³n para reiniciar
+            restartButton.addEventListener('click', function() {
+                restartButton.style.display = 'none';
+                initHouse();
+            });
+        }
+        
+        // Configurar el audio para detector el volumen
+        function setupAudio() {
+            // FunciÃ³n para inicializar audio cuando el usuario interactÃºe con la pÃ¡gina
+            function initAudio() {
+                if (audioInitialized) return;
+                
+                // Solicitar acceso al micrÃ³fono
+                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                    .then(function(stream) {
+                        // Actualizar estado del micrÃ³fono
+                        micStatus.textContent = 'MicrÃ³fono: Activado';
+                        
+                        // Crear el audio context
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        analyser = audioContext.createAnalyser();
+                        microphone = audioContext.createMediaStreamSource(stream);
+                        
+                        // Conectar el micrÃ³fono al analizador
+                        microphone.connect(analyser);
+                        analyser.fftSize = 256;
+                        
+                        // Crear un nodo JavaScript para procesar los datos de audio
+                        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+                        analyser.connect(javascriptNode);
+                        javascriptNode.connect(audioContext.destination);
+                        
+                        // Procesar los datos de audio para detectar volumen
+                        javascriptNode.onaudioprocess = function() {
+                            const array = new Uint8Array(analyser.frequencyBinCount);
+                            analyser.getByteFrequencyData(array);
+                            
+                            // Calcular el promedio del volumen
+                            let values = 0;
+                            const length = array.length;
+                            for (let i = 0; i < length; i++) {
+                                values += array[i];
+                            }
+                            
+                            const average = values / length;
+                            
+                            // Usar el volumen para inflar la casa
+                            const normalizedVolume = average / 128; // Normalizar a un rango aproximado de 0-1
+                            
+                            // Respuesta mÃ¡s sensible al sonido
+                            if (normalizedVolume > 0.05) { // Umbral mÃ¡s bajo
+                                if (!casaState.rota) {
+                                    casaState.inflation += normalizedVolume * 0.05; // MÃ¡s sensible
+                                    
+                                    // Limitar la inflaciÃ³n mÃ¡xima
+                                    if (casaState.inflation > 1) {
+                                        casaState.inflation = 1;
+                                    }
+                                    
+                                    // Deformar ligeramente la casa en funciÃ³n del audio
+                                    const audioIntensity = normalizedVolume * 3;
+                                    casaState.puntos.forEach((punto, index) => {
+                                        if (index > 0 && index < casaState.puntos.length - 1) {
+                                            // Mover punto ligeramente en direcciÃ³n radial desde el centro
+                                            const centerX = 400;
+                                            const centerY = 250;
+                                            const dx = punto.x - centerX;
+                                            const dy = punto.y - centerY;
+                                            const len = Math.sqrt(dx * dx + dy * dy);
+                                            
+                                            if (len > 0) {
+                                                // AÃ±adir pequeÃ±o desplazamiento en direcciÃ³n radial
+                                                const pulseAmt = Math.sin(Date.now() / 100 + index) * audioIntensity;
+                                                punto.x += (dx / len) * pulseAmt;
+                                                punto.y += (dy / len) * pulseAmt;
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        };
+                        
+                        audioInitialized = true;
+                    })
+                    .catch(function(err) {
+                        console.log('Error accediendo al micrÃ³fono: ' + err);
+                        micStatus.textContent = 'MicrÃ³fono: Error de acceso';
+                    });
+            }
+            
+            // Intentar inicializar audio cuando haya interacciÃ³n
+            document.addEventListener('click', initAudio);
+            document.addEventListener('keydown', initAudio);
+            canvas.addEventListener('mousedown', initAudio);
+            
+            // TambiÃ©n intentar inicializar en el load
+            window.addEventListener('load', function() {
+                setTimeout(initAudio, 1000);
+            });
+            
+            // Actualizaciones de status para mejor feedback
+            micStatus.addEventListener('click', function() {
+                if (!audioInitialized) {
+                    micStatus.textContent = 'MicrÃ³fono: Intentando activar...';
+                    initAudio();
+                }
+            });
+        }
+        
+        // Bucle principal
+        function gameLoop() {
+            updateHouse();
+            drawHouse();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Inicializar todo
+        function init() {
+            initHouse();
+            setupMouseEvents();
+            setupAudio();
+            gameLoop();
+        }
+        
+        // Iniciar cuando se cargue la pÃ¡gina
+        window.onload = init;
+    </script>
 </body>
 </html>
